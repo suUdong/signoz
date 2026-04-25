@@ -4188,6 +4188,10 @@ export interface DashboardtypesDashboardDTO {
 	org_id?: string;
 	/**
 	 * @type string
+	 */
+	source?: string;
+	/**
+	 * @type string
 	 * @format date-time
 	 */
 	updatedAt?: Date;
@@ -4217,6 +4221,40 @@ export interface DashboardtypesGettablePublicDashboardDataDTO {
 	publicDashboard?: DashboardtypesGettablePublicDasbhboardDTO;
 }
 
+export interface DashboardtypesGettableSystemDashboardDTO {
+	/**
+	 * @type string
+	 * @format date-time
+	 */
+	createdAt?: Date;
+	/**
+	 * @type string
+	 */
+	createdBy?: string;
+	data?: DashboardtypesStorableDashboardDataDTO;
+	/**
+	 * @type string
+	 */
+	id?: string;
+	/**
+	 * @type string
+	 */
+	org_id?: string;
+	/**
+	 * @type string
+	 */
+	source?: string;
+	/**
+	 * @type string
+	 * @format date-time
+	 */
+	updatedAt?: Date;
+	/**
+	 * @type string
+	 */
+	updatedBy?: string;
+}
+
 export interface DashboardtypesPostablePublicDashboardDTO {
 	/**
 	 * @type string
@@ -4241,6 +4279,10 @@ export interface DashboardtypesUpdatablePublicDashboardDTO {
 	 * @type boolean
 	 */
 	timeRangeEnabled?: boolean;
+}
+
+export interface DashboardtypesUpdatableSystemDashboardDTO {
+	data?: DashboardtypesStorableDashboardDataDTO;
 }
 
 export interface ErrorsJSONDTO {
@@ -9238,6 +9280,39 @@ export type UpdateSpanMapperPathParameters = {
 	groupId: string;
 	mapperId: string;
 };
+export type GetSystemDashboardPathParameters = {
+	source: string;
+};
+export type GetSystemDashboard200 = {
+	data: DashboardtypesGettableSystemDashboardDTO;
+	/**
+	 * @type string
+	 */
+	status: string;
+};
+
+export type UpdateSystemDashboardPathParameters = {
+	source: string;
+};
+export type UpdateSystemDashboard200 = {
+	data: DashboardtypesGettableSystemDashboardDTO;
+	/**
+	 * @type string
+	 */
+	status: string;
+};
+
+export type ResetSystemDashboardPathParameters = {
+	source: string;
+};
+export type ResetSystemDashboard200 = {
+	data: DashboardtypesGettableSystemDashboardDTO;
+	/**
+	 * @type string
+	 */
+	status: string;
+};
+
 export type ListUsersDeprecated200 = {
 	/**
 	 * @type array

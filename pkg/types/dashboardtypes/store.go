@@ -13,6 +13,8 @@ type Store interface {
 
 	Get(context.Context, valuer.UUID, valuer.UUID) (*StorableDashboard, error)
 
+	GetBySource(context.Context, valuer.UUID, string) (*StorableDashboard, error)
+
 	GetPublic(context.Context, string) (*StorablePublicDashboard, error)
 
 	GetDashboardByOrgsAndPublicID(context.Context, []string, string) (*StorableDashboard, error)
@@ -25,9 +27,13 @@ type Store interface {
 
 	Update(context.Context, valuer.UUID, *StorableDashboard) error
 
+	UpdateBySource(context.Context, valuer.UUID, string, *StorableDashboard) error
+
 	UpdatePublic(context.Context, *StorablePublicDashboard) error
 
 	Delete(context.Context, valuer.UUID, valuer.UUID) error
+
+	DeleteBySource(context.Context, valuer.UUID, string) error
 
 	DeletePublic(context.Context, string) error
 

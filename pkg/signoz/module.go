@@ -17,6 +17,7 @@ import (
 	"github.com/SigNoz/signoz/pkg/modules/dashboard"
 	"github.com/SigNoz/signoz/pkg/modules/inframonitoring"
 	"github.com/SigNoz/signoz/pkg/modules/inframonitoring/implinframonitoring"
+	"github.com/SigNoz/signoz/pkg/modules/dashboard/impldashboard"
 	"github.com/SigNoz/signoz/pkg/modules/metricsexplorer"
 	"github.com/SigNoz/signoz/pkg/modules/metricsexplorer/implmetricsexplorer"
 	"github.com/SigNoz/signoz/pkg/modules/organization"
@@ -41,6 +42,8 @@ import (
 	"github.com/SigNoz/signoz/pkg/modules/session/implsession"
 	"github.com/SigNoz/signoz/pkg/modules/spanpercentile"
 	"github.com/SigNoz/signoz/pkg/modules/spanpercentile/implspanpercentile"
+	"github.com/SigNoz/signoz/pkg/modules/systemdashboard"
+	"github.com/SigNoz/signoz/pkg/modules/systemdashboard/implsystemdashboard"
 	"github.com/SigNoz/signoz/pkg/modules/tracedetail"
 	"github.com/SigNoz/signoz/pkg/modules/tracedetail/impltracedetail"
 	"github.com/SigNoz/signoz/pkg/modules/tracefunnel"
@@ -68,6 +71,7 @@ type Modules struct {
 	SavedView        savedview.Module
 	Apdex            apdex.Module
 	Dashboard        dashboard.Module
+	SystemDashboard  systemdashboard.Module
 	QuickFilter      quickfilter.Module
 	TraceFunnel      tracefunnel.Module
 	RawDataExport    rawdataexport.Module
@@ -109,7 +113,8 @@ func NewModules(
 	fl flagger.Flagger,
 ) Modules {
 	quickfilter := implquickfilter.NewModule(implquickfilter.NewStore(sqlstore))
-	orgSetter := implorganization.NewSetter(implorganization.NewStore(sqlstore), alertmanager, quickfilter)
+	systemDashboard := implsystemdashboard.NewModule(impldashboard.NewStore(sqlstore))
+	orgSetter := implorganization.NewSetter(implorganization.NewStore(sqlstore), alertmanager, quickfilter, systemDashboard)
 	userSetter := impluser.NewSetter(impluser.NewStore(sqlstore, providerSettings), tokenizer, emailing, providerSettings, orgSetter, authz, analytics, config.User, userRoleStore, userGetter)
 	ruleStore := sqlrulestore.NewRuleStore(sqlstore, queryParser, providerSettings)
 
@@ -120,6 +125,7 @@ func NewModules(
 		SavedView:        implsavedview.NewModule(sqlstore),
 		Apdex:            implapdex.NewModule(sqlstore),
 		Dashboard:        dashboard,
+		SystemDashboard:  systemDashboard,
 		UserSetter:       userSetter,
 		UserGetter:       userGetter,
 		RetentionGetter:  retentionGetter,

@@ -21,7 +21,7 @@ func NewStore(sqlstore sqlstore.SQLStore) dashboardtypes.Store {
 func (store *store) Create(ctx context.Context, storabledashboard *dashboardtypes.StorableDashboard) error {
 	_, err := store.
 		sqlstore.
-		BunDB().
+		BunDBCtx(ctx).
 		NewInsert().
 		Model(storabledashboard).
 		Exec(ctx)
@@ -55,9 +55,27 @@ func (store *store) Get(ctx context.Context, orgID valuer.UUID, id valuer.UUID) 
 		Model(storableDashboard).
 		Where("id = ?", id).
 		Where("org_id = ?", orgID).
+		Where("source = ?", "").
 		Scan(ctx)
 	if err != nil {
 		return nil, store.sqlstore.WrapNotFoundErrf(err, errors.CodeNotFound, "dashboard with id %s doesn't exist", id)
+	}
+
+	return storableDashboard, nil
+}
+
+func (store *store) GetBySource(ctx context.Context, orgID valuer.UUID, source string) (*dashboardtypes.StorableDashboard, error) {
+	storableDashboard := new(dashboardtypes.StorableDashboard)
+	err := store.
+		sqlstore.
+		BunDBCtx(ctx).
+		NewSelect().
+		Model(storableDashboard).
+		Where("org_id = ?", orgID).
+		Where("source = ?", source).
+		Scan(ctx)
+	if err != nil {
+		return nil, store.sqlstore.WrapNotFoundErrf(err, errors.CodeNotFound, "system dashboard with source %s doesn't exist", source)
 	}
 
 	return storableDashboard, nil
@@ -124,6 +142,7 @@ func (store *store) List(ctx context.Context, orgID valuer.UUID) ([]*dashboardty
 		NewSelect().
 		Model(&storableDashboards).
 		Where("org_id = ?", orgID).
+		Where("source = ?", "").
 		Scan(ctx)
 	if err != nil {
 		return nil, err
@@ -158,9 +177,31 @@ func (store *store) Update(ctx context.Context, orgID valuer.UUID, storableDashb
 		Model(storableDashboard).
 		WherePK().
 		Where("org_id = ?", orgID).
+		Where("source = ?", "").
 		Exec(ctx)
 	if err != nil {
 		return store.sqlstore.WrapNotFoundErrf(err, errors.CodeNotFound, "dashboard with id %s doesn't exist", storableDashboard.ID)
+	}
+
+	return nil
+}
+
+// UpdateBySource updates the org's system dashboard for the given source.(org_id, source)
+// Delete drops and re-creates the row with a new id, last id from a prior Get should not cause this update to match zero rows.
+func (store *store) UpdateBySource(ctx context.Context, orgID valuer.UUID, source string, storableDashboard *dashboardtypes.StorableDashboard) error {
+	_, err := store.
+		sqlstore.
+		BunDBCtx(ctx).
+		NewUpdate().
+		Model(storableDashboard).
+		Set("data = ?", storableDashboard.Data).
+		Set("updated_by = ?", storableDashboard.UpdatedBy).
+		Set("updated_at = ?", storableDashboard.UpdatedAt).
+		Where("org_id = ?", orgID).
+		Where("source = ?", source).
+		Exec(ctx)
+	if err != nil {
+		return store.sqlstore.WrapNotFoundErrf(err, errors.CodeNotFound, "system dashboard with source %s doesn't exist", source)
 	}
 
 	return nil
@@ -189,9 +230,26 @@ func (store *store) Delete(ctx context.Context, orgID valuer.UUID, id valuer.UUI
 		Model(new(dashboardtypes.StorableDashboard)).
 		Where("id = ?", id).
 		Where("org_id = ?", orgID).
+		Where("source = ?", "").
 		Exec(ctx)
 	if err != nil {
 		return store.sqlstore.WrapNotFoundErrf(err, errors.CodeNotFound, "dashboard with id %s doesn't exist", id)
+	}
+
+	return nil
+}
+
+func (store *store) DeleteBySource(ctx context.Context, orgID valuer.UUID, source string) error {
+	_, err := store.
+		sqlstore.
+		BunDBCtx(ctx).
+		NewDelete().
+		Model(new(dashboardtypes.StorableDashboard)).
+		Where("org_id = ?", orgID).
+		Where("source = ?", source).
+		Exec(ctx)
+	if err != nil {
+		return store.sqlstore.WrapNotFoundErrf(err, errors.CodeNotFound, "system dashboard with source %s doesn't exist", source)
 	}
 
 	return nil

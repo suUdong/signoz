@@ -30,6 +30,7 @@ type StorableDashboard struct {
 	Data   StorableDashboardData `bun:"data,type:text,notnull"`
 	Locked bool                  `bun:"locked,notnull,default:false"`
 	OrgID  valuer.UUID           `bun:"org_id,notnull"`
+	Source string                `bun:"source,type:text,notnull"`
 }
 
 type Dashboard struct {
@@ -40,6 +41,7 @@ type Dashboard struct {
 	Data   StorableDashboardData `json:"data"`
 	Locked bool                  `json:"locked"`
 	OrgID  valuer.UUID           `json:"org_id"`
+	Source string                `json:"source"`
 }
 
 type LockUnlockDashboard struct {
@@ -79,6 +81,7 @@ func NewStorableDashboardFromDashboard(dashboard *Dashboard) (*StorableDashboard
 		OrgID:  dashboard.OrgID,
 		Data:   dashboard.Data,
 		Locked: dashboard.Locked,
+		Source: dashboard.Source,
 	}, nil
 }
 
@@ -101,6 +104,30 @@ func NewDashboard(orgID valuer.UUID, createdBy string, storableDashboardData Sto
 	}, nil
 }
 
+// NewSystemDashboard builds a Dashboard owned by the system identified by source (e.g. "ai-o11y-overview").
+func NewSystemDashboard(orgID valuer.UUID, source string, data StorableDashboardData) (*Dashboard, error) {
+	if source == "" {
+		return nil, errors.Newf(errors.TypeInvalidInput, errors.CodeInvalidInput, "source is required for a system dashboard")
+	}
+
+	currentTime := time.Now()
+
+	return &Dashboard{
+		ID: valuer.GenerateUUID().StringValue(),
+		TimeAuditable: types.TimeAuditable{
+			CreatedAt: currentTime,
+			UpdatedAt: currentTime,
+		},
+		UserAuditable: types.UserAuditable{
+			CreatedBy: "system",
+			UpdatedBy: "system",
+		},
+		OrgID:  orgID,
+		Data:   data,
+		Source: source,
+	}, nil
+}
+
 func NewDashboardFromStorableDashboard(storableDashboard *StorableDashboard) *Dashboard {
 	return &Dashboard{
 		ID: storableDashboard.ID.StringValue(),
@@ -115,6 +142,7 @@ func NewDashboardFromStorableDashboard(storableDashboard *StorableDashboard) *Da
 		OrgID:  storableDashboard.OrgID,
 		Data:   storableDashboard.Data,
 		Locked: storableDashboard.Locked,
+		Source: storableDashboard.Source,
 	}
 }
 
@@ -147,6 +175,7 @@ func NewGettableDashboardFromDashboard(dashboard *Dashboard) (*GettableDashboard
 		OrgID:         dashboard.OrgID,
 		Data:          dashboard.Data,
 		Locked:        dashboard.Locked,
+		Source:        dashboard.Source,
 	}, nil
 }
 
