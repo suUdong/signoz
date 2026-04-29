@@ -44,6 +44,8 @@ import { defaultTo, isEmpty } from 'lodash-es';
 import { useErrorModal } from 'providers/ErrorModalProvider';
 import APIError from 'types/api/error';
 import { ALL_TIME_ZONES } from 'utils/timeZoneUtil';
+import { type PanelMode } from 'rc-picker/lib/interface';
+import { DeepPartial } from 'utils/types';
 
 import 'dayjs/locale/en';
 
@@ -60,7 +62,6 @@ import {
 } from './PlannedDowntimeutils';
 
 import './PlannedDowntime.styles.scss';
-import { PanelMode } from 'rc-picker/lib/interface';
 
 dayjs.locale('en');
 dayjs.extend(utc);
@@ -82,7 +83,7 @@ interface PlannedDowntimeFormData {
 const customFormat = DATE_TIME_FORMATS.ORDINAL_DATETIME;
 
 interface PlannedDowntimeFormProps {
-	initialValues: Partial<
+	initialValues: DeepPartial<
 		RuletypesPlannedMaintenanceDTO & {
 			editMode: boolean;
 		}
@@ -275,7 +276,7 @@ export function PlannedDowntimeForm(
 				: '',
 			recurrence: {
 				...initialValues.schedule?.recurrence,
-				repeatType: (!isScheduleRecurring(initialValues?.schedule)
+				repeatType: (!isScheduleRecurring(initialValues.schedule)
 					? recurrenceOptions.doesNotRepeat.value
 					: initialValues.schedule?.recurrence
 							?.repeatType) as RuletypesRecurrenceDTO['repeatType'],

@@ -18,6 +18,7 @@ import { Search } from 'lucide-react';
 import { useAppContext } from 'providers/App/App';
 import { useErrorModal } from 'providers/ErrorModalProvider';
 import { USER_ROLES } from 'types/roles';
+import { DeepPartial } from 'utils/types';
 
 import 'dayjs/locale/en';
 
@@ -49,7 +50,7 @@ export function PlannedDowntime(): JSX.Element {
 	const urlQuery = useUrlQuery();
 
 	const [initialValues, setInitialValues] =
-		useState<Partial<RuletypesPlannedMaintenanceDTO & { editMode: boolean }>>(
+		useState<DeepPartial<RuletypesPlannedMaintenanceDTO & { editMode: boolean }>>(
 			defaultInitialValues,
 		);
 
