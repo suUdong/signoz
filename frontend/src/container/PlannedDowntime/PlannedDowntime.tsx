@@ -25,7 +25,7 @@ import { PlannedDowntimeDeleteModal } from './PlannedDowntimeDeleteModal';
 import { PlannedDowntimeForm } from './PlannedDowntimeForm';
 import { PlannedDowntimeList } from './PlannedDowntimeList';
 import {
-	defautlInitialValues,
+	defaultInitialValues,
 	deleteDowntimeHandler,
 } from './PlannedDowntimeutils';
 
@@ -50,7 +50,7 @@ export function PlannedDowntime(): JSX.Element {
 
 	const [initialValues, setInitialValues] =
 		useState<Partial<RuletypesPlannedMaintenanceDTO & { editMode: boolean }>>(
-			defautlInitialValues,
+			defaultInitialValues,
 		);
 
 	const downtimeSchedules = useListDowntimeSchedules();
@@ -150,7 +150,7 @@ export function PlannedDowntime(): JSX.Element {
 							icon={<PlusOutlined />}
 							type="primary"
 							onClick={(): void => {
-								setInitialValues({ ...defautlInitialValues, editMode: false });
+								setInitialValues({ ...defaultInitialValues, editMode: false });
 								setIsOpen(true);
 								setEditMode(false);
 								form.resetFields();
