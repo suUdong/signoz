@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	
+
 	"github.com/SigNoz/signoz/pkg/errors"
 	"github.com/SigNoz/signoz/pkg/http/render"
 	"github.com/SigNoz/signoz/pkg/modules/systemdashboard"
+	"github.com/SigNoz/signoz/pkg/types"
 	"github.com/SigNoz/signoz/pkg/types/authtypes"
 	"github.com/SigNoz/signoz/pkg/types/dashboardtypes"
 	"github.com/SigNoz/signoz/pkg/valuer"
@@ -34,25 +35,13 @@ func (handler *handler) Get(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orgID, err := valuer.NewUUID(claims.OrgID)
+	dashboard, err := handler.module.Get(ctx, valuer.MustNewUUID(claims.OrgID), parseSource(r))
 	if err != nil {
 		render.Error(rw, err)
 		return
 	}
 
-	source, err := parseSource(r)
-	if err != nil {
-		render.Error(rw, err)
-		return
-	}
-
-	dashboard, err := handler.module.Get(ctx, orgID, source)
-	if err != nil {
-		render.Error(rw, err)
-		return
-	}
-
-	render.Success(rw, http.StatusOK, dashboardtypes.NewGettableSystemDashboardFromDashboard(dashboard))
+	render.Success(rw, http.StatusOK, dashboard)
 }
 
 func (handler *handler) Update(rw http.ResponseWriter, r *http.Request) {
@@ -65,36 +54,27 @@ func (handler *handler) Update(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orgID, err := valuer.NewUUID(claims.OrgID)
-	if err != nil {
-		render.Error(rw, err)
-		return
-	}
-
-	source, err := parseSource(r)
-	if err != nil {
-		render.Error(rw, err)
-		return
-	}
-
-	req := dashboardtypes.UpdatableSystemDashboard{}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	data := dashboardtypes.UpdatableDashboard{}
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		render.Error(rw, errors.Wrapf(err, errors.TypeInvalidInput, errors.CodeInvalidInput, "invalid request body"))
 		return
 	}
 
-	if req.Data == nil {
+	if data == nil {
 		render.Error(rw, errors.Newf(errors.TypeInvalidInput, errors.CodeInvalidInput, "data is required"))
 		return
 	}
 
-	dashboard, err := handler.module.Update(ctx, orgID, source, claims.Email, req.Data)
+	dashboard, err := handler.module.Update(ctx, valuer.MustNewUUID(claims.OrgID), parseSource(r), &dashboardtypes.Dashboard{
+		Data:          data,
+		UserAuditable: types.UserAuditable{UpdatedBy: claims.Email},
+	})
 	if err != nil {
 		render.Error(rw, err)
 		return
 	}
 
-	render.Success(rw, http.StatusOK, dashboardtypes.NewGettableSystemDashboardFromDashboard(dashboard))
+	render.Success(rw, http.StatusOK, dashboard)
 }
 
 func (handler *handler) Reset(rw http.ResponseWriter, r *http.Request) {
@@ -107,32 +87,16 @@ func (handler *handler) Reset(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orgID, err := valuer.NewUUID(claims.OrgID)
+	dashboard, err := handler.module.Reset(ctx, valuer.MustNewUUID(claims.OrgID), parseSource(r))
 	if err != nil {
 		render.Error(rw, err)
 		return
 	}
 
-	source, err := parseSource(r)
-	if err != nil {
-		render.Error(rw, err)
-		return
-	}
-
-	dashboard, err := handler.module.Reset(ctx, orgID, source)
-	if err != nil {
-		render.Error(rw, err)
-		return
-	}
-
-	render.Success(rw, http.StatusOK, dashboardtypes.NewGettableSystemDashboardFromDashboard(dashboard))
+	render.Success(rw, http.StatusOK, dashboard)
 }
 
-func parseSource(r *http.Request) (dashboardtypes.Source, error) {
-	source := mux.Vars(r)["source"]
-	if source == "" {
-		return dashboardtypes.Source{}, errors.Newf(errors.TypeInvalidInput, errors.CodeInvalidInput, "source is missing in the path")
-	}
-
-	return dashboardtypes.NewSource(source)
+// parseSource reads the {source} path segment.
+func parseSource(r *http.Request) dashboardtypes.Source {
+	return dashboardtypes.Source(mux.Vars(r)["source"])
 }

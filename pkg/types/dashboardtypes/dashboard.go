@@ -85,7 +85,7 @@ func NewStorableDashboardFromDashboard(dashboard *Dashboard) (*StorableDashboard
 	}, nil
 }
 
-func NewDashboard(orgID valuer.UUID, createdBy string, storableDashboardData StorableDashboardData) (*Dashboard, error) {
+func NewDashboard(orgID valuer.UUID, createdBy string, data StorableDashboardData, source Source) (*Dashboard, error) {
 	currentTime := time.Now()
 
 	return &Dashboard{
@@ -99,32 +99,8 @@ func NewDashboard(orgID valuer.UUID, createdBy string, storableDashboardData Sto
 			UpdatedBy: createdBy,
 		},
 		OrgID:  orgID,
-		Data:   storableDashboardData,
-		Locked: false,
-	}, nil
-}
-
-// NewSystemDashboard builds a Dashboard owned by the system identified by source (e.g. "ai-o11y-overview").
-func NewSystemDashboard(orgID valuer.UUID, source string, data StorableDashboardData) (*Dashboard, error) {
-	if source == "" {
-		return nil, errors.Newf(errors.TypeInvalidInput, errors.CodeInvalidInput, "source is required for a system dashboard")
-	}
-
-	currentTime := time.Now()
-
-	return &Dashboard{
-		ID: valuer.GenerateUUID().StringValue(),
-		TimeAuditable: types.TimeAuditable{
-			CreatedAt: currentTime,
-			UpdatedAt: currentTime,
-		},
-		UserAuditable: types.UserAuditable{
-			CreatedBy: "system",
-			UpdatedBy: "system",
-		},
-		OrgID:  orgID,
 		Data:   data,
-		Source: source,
+		Source: string(source),
 	}, nil
 }
 

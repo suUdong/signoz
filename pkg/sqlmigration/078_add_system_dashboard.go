@@ -43,28 +43,21 @@ func (migration *addSystemDashboard) Up(ctx context.Context, db *bun.DB) error {
 		_ = tx.Rollback()
 	}()
 
-	exists, err := migration.sqlstore.Dialect().ColumnExists(ctx, tx, "dashboard", "source")
+	table, uniqueConstraints, err := migration.sqlschema.GetTable(ctx, "dashboard")
 	if err != nil {
 		return err
 	}
 
-	if !exists {
-		table, uniqueConstraints, err := migration.sqlschema.GetTable(ctx, sqlschema.TableName("dashboard"))
-		if err != nil {
+	column := &sqlschema.Column{
+		Name:     sqlschema.ColumnName("source"),
+		DataType: sqlschema.DataTypeText,
+		Nullable: false,
+	}
+
+	sqls := migration.sqlschema.Operator().AddColumn(table, uniqueConstraints, column, "")
+	for _, sql := range sqls {
+		if _, err := tx.ExecContext(ctx, string(sql)); err != nil {
 			return err
-		}
-
-		column := &sqlschema.Column{
-			Name:     sqlschema.ColumnName("source"),
-			DataType: sqlschema.DataTypeText,
-			Nullable: false,
-		}
-
-		sqls := migration.sqlschema.Operator().AddColumn(table, uniqueConstraints, column, "")
-		for _, sql := range sqls {
-			if _, err := tx.ExecContext(ctx, string(sql)); err != nil {
-				return err
-			}
 		}
 	}
 
@@ -79,11 +72,11 @@ func (migration *addSystemDashboard) Up(ctx context.Context, db *bun.DB) error {
 			return err
 		}
 
-		for _, source := range dashboardtypes.AllSources {
+		for _, source := range dashboardtypes.SystemSources {
 			count, err := tx.NewSelect().
 				Model((*dashboardtypes.StorableDashboard)(nil)).
 				Where("org_id = ?", orgID).
-				Where("source = ?", source.StringValue()).
+				Where("source = ?", string(source)).
 				Count(ctx)
 			if err != nil {
 				return err

@@ -2247,27 +2247,6 @@ components:
         publicDashboard:
           $ref: '#/components/schemas/DashboardtypesGettablePublicDasbhboard'
       type: object
-    DashboardtypesGettableSystemDashboard:
-      properties:
-        createdAt:
-          format: date-time
-          type: string
-        createdBy:
-          type: string
-        data:
-          $ref: '#/components/schemas/DashboardtypesStorableDashboardData'
-        id:
-          type: string
-        org_id:
-          type: string
-        source:
-          type: string
-        updatedAt:
-          format: date-time
-          type: string
-        updatedBy:
-          type: string
-      type: object
     DashboardtypesPostablePublicDashboard:
       properties:
         defaultTimeRange:
@@ -2277,6 +2256,7 @@ components:
       type: object
     DashboardtypesStorableDashboardData:
       additionalProperties: {}
+      nullable: true
       type: object
     DashboardtypesUpdatablePublicDashboard:
       properties:
@@ -2284,11 +2264,6 @@ components:
           type: string
         timeRangeEnabled:
           type: boolean
-      type: object
-    DashboardtypesUpdatableSystemDashboard:
-      properties:
-        data:
-          $ref: '#/components/schemas/DashboardtypesStorableDashboardData'
       type: object
     ErrorsJSON:
       properties:
@@ -10882,7 +10857,7 @@ paths:
       summary: Update a span mapper
       tags:
       - spanmapper
-  /api/v1/system/{source}/dashboard:
+  /api/v1/system/{source}:
     get:
       deprecated: false
       description: This endpoint returns the system dashboard for the callers org
@@ -10901,7 +10876,7 @@ paths:
               schema:
                 properties:
                   data:
-                    $ref: '#/components/schemas/DashboardtypesGettableSystemDashboard'
+                    $ref: '#/components/schemas/DashboardtypesDashboard'
                   status:
                     type: string
                 required:
@@ -10909,6 +10884,12 @@ paths:
                 - data
                 type: object
           description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderErrorResponse'
+          description: Bad Request
         "401":
           content:
             application/json:
@@ -10934,7 +10915,7 @@ paths:
         - VIEWER
       summary: Get system dashboard
       tags:
-      - system-dashboard
+      - systemdashboard
     put:
       deprecated: false
       description: This endpoint replaces the system dashboard for the callers org
@@ -10950,7 +10931,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DashboardtypesUpdatableSystemDashboard'
+              $ref: '#/components/schemas/DashboardtypesStorableDashboardData'
       responses:
         "200":
           content:
@@ -10958,7 +10939,7 @@ paths:
               schema:
                 properties:
                   data:
-                    $ref: '#/components/schemas/DashboardtypesGettableSystemDashboard'
+                    $ref: '#/components/schemas/DashboardtypesDashboard'
                   status:
                     type: string
                 required:
@@ -10966,6 +10947,12 @@ paths:
                 - data
                 type: object
           description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderErrorResponse'
+          description: Bad Request
         "401":
           content:
             application/json:
@@ -10991,12 +10978,11 @@ paths:
         - EDITOR
       summary: Update system dashboard
       tags:
-      - system-dashboard
-  /api/v1/system/{source}/dashboard/reset:
+      - systemdashboard
+  /api/v1/system/{source}/reset:
     post:
       deprecated: false
-      description: This endpoint drops any customisation to the system dashboard,
-        writes the defaults back, and returns the freshly seeded dashboard.
+      description: This resets edited/updated system dashboard to default system dashboard.
       operationId: ResetSystemDashboard
       parameters:
       - in: path
@@ -11011,7 +10997,7 @@ paths:
               schema:
                 properties:
                   data:
-                    $ref: '#/components/schemas/DashboardtypesGettableSystemDashboard'
+                    $ref: '#/components/schemas/DashboardtypesDashboard'
                   status:
                     type: string
                 required:
@@ -11019,6 +11005,12 @@ paths:
                 - data
                 type: object
           description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderErrorResponse'
+          description: Bad Request
         "401":
           content:
             application/json:
@@ -11044,7 +11036,7 @@ paths:
         - EDITOR
       summary: Reset system dashboard to defaults
       tags:
-      - system-dashboard
+      - systemdashboard
   /api/v1/testChannel:
     post:
       deprecated: true

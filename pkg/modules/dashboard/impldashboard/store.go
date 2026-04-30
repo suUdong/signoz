@@ -169,39 +169,19 @@ func (store *store) ListPublic(ctx context.Context, orgID valuer.UUID) ([]*dashb
 	return storable, nil
 }
 
+// Update works for user dashboards (Source = "") and system dashboards (Source = "ai-o11y-overview").
 func (store *store) Update(ctx context.Context, orgID valuer.UUID, storableDashboard *dashboardtypes.StorableDashboard) error {
-	_, err := store.
-		sqlstore.
-		BunDB().
-		NewUpdate().
-		Model(storableDashboard).
-		WherePK().
-		Where("org_id = ?", orgID).
-		Where("source = ?", "").
-		Exec(ctx)
-	if err != nil {
-		return store.sqlstore.WrapNotFoundErrf(err, errors.CodeNotFound, "dashboard with id %s doesn't exist", storableDashboard.ID)
-	}
-
-	return nil
-}
-
-// UpdateBySource updates the org's system dashboard for the given source.(org_id, source)
-// Delete drops and re-creates the row with a new id, last id from a prior Get should not cause this update to match zero rows.
-func (store *store) UpdateBySource(ctx context.Context, orgID valuer.UUID, source string, storableDashboard *dashboardtypes.StorableDashboard) error {
 	_, err := store.
 		sqlstore.
 		BunDBCtx(ctx).
 		NewUpdate().
 		Model(storableDashboard).
-		Set("data = ?", storableDashboard.Data).
-		Set("updated_by = ?", storableDashboard.UpdatedBy).
-		Set("updated_at = ?", storableDashboard.UpdatedAt).
+		WherePK().
 		Where("org_id = ?", orgID).
-		Where("source = ?", source).
+		Where("source = ?", storableDashboard.Source).
 		Exec(ctx)
 	if err != nil {
-		return store.sqlstore.WrapNotFoundErrf(err, errors.CodeNotFound, "system dashboard with source %s doesn't exist", source)
+		return store.sqlstore.WrapNotFoundErrf(err, errors.CodeNotFound, "dashboard with id %s doesn't exist", storableDashboard.ID)
 	}
 
 	return nil
@@ -234,22 +214,6 @@ func (store *store) Delete(ctx context.Context, orgID valuer.UUID, id valuer.UUI
 		Exec(ctx)
 	if err != nil {
 		return store.sqlstore.WrapNotFoundErrf(err, errors.CodeNotFound, "dashboard with id %s doesn't exist", id)
-	}
-
-	return nil
-}
-
-func (store *store) DeleteBySource(ctx context.Context, orgID valuer.UUID, source string) error {
-	_, err := store.
-		sqlstore.
-		BunDBCtx(ctx).
-		NewDelete().
-		Model(new(dashboardtypes.StorableDashboard)).
-		Where("org_id = ?", orgID).
-		Where("source = ?", source).
-		Exec(ctx)
-	if err != nil {
-		return store.sqlstore.WrapNotFoundErrf(err, errors.CodeNotFound, "system dashboard with source %s doesn't exist", source)
 	}
 
 	return nil

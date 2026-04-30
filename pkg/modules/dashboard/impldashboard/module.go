@@ -38,7 +38,7 @@ func NewModule(store dashboardtypes.Store, settings factory.ProviderSettings, an
 }
 
 func (module *module) Create(ctx context.Context, orgID valuer.UUID, createdBy string, creator valuer.UUID, postableDashboard dashboardtypes.PostableDashboard) (*dashboardtypes.Dashboard, error) {
-	dashboard, err := dashboardtypes.NewDashboard(orgID, createdBy, postableDashboard)
+	dashboard, err := dashboardtypes.NewDashboard(orgID, createdBy, postableDashboard, "")
 	if err != nil {
 		return nil, err
 	}

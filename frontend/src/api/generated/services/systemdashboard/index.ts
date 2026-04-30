@@ -18,7 +18,7 @@ import type {
 } from 'react-query';
 
 import type {
-	DashboardtypesUpdatableSystemDashboardDTO,
+	DashboardtypesStorableDashboardDataDTO,
 	GetSystemDashboard200,
 	GetSystemDashboardPathParameters,
 	RenderErrorResponseDTO,
@@ -40,7 +40,7 @@ export const getSystemDashboard = (
 	signal?: AbortSignal,
 ) => {
 	return GeneratedAPIInstance<GetSystemDashboard200>({
-		url: `/api/v1/system/${source}/dashboard`,
+		url: `/api/v1/system/${source}`,
 		method: 'GET',
 		signal,
 	});
@@ -49,7 +49,7 @@ export const getSystemDashboard = (
 export const getGetSystemDashboardQueryKey = ({
 	source,
 }: GetSystemDashboardPathParameters) => {
-	return [`/api/v1/system/${source}/dashboard`] as const;
+	return [`/api/v1/system/${source}`] as const;
 };
 
 export const getGetSystemDashboardQueryOptions = <
@@ -141,13 +141,13 @@ export const invalidateGetSystemDashboard = async (
  */
 export const updateSystemDashboard = (
 	{ source }: UpdateSystemDashboardPathParameters,
-	dashboardtypesUpdatableSystemDashboardDTO: BodyType<DashboardtypesUpdatableSystemDashboardDTO>,
+	dashboardtypesStorableDashboardDataDTO: BodyType<DashboardtypesStorableDashboardDataDTO>,
 ) => {
 	return GeneratedAPIInstance<UpdateSystemDashboard200>({
-		url: `/api/v1/system/${source}/dashboard`,
+		url: `/api/v1/system/${source}`,
 		method: 'PUT',
 		headers: { 'Content-Type': 'application/json' },
-		data: dashboardtypesUpdatableSystemDashboardDTO,
+		data: dashboardtypesStorableDashboardDataDTO,
 	});
 };
 
@@ -160,7 +160,7 @@ export const getUpdateSystemDashboardMutationOptions = <
 		TError,
 		{
 			pathParams: UpdateSystemDashboardPathParameters;
-			data: BodyType<DashboardtypesUpdatableSystemDashboardDTO>;
+			data: BodyType<DashboardtypesStorableDashboardDataDTO>;
 		},
 		TContext
 	>;
@@ -169,7 +169,7 @@ export const getUpdateSystemDashboardMutationOptions = <
 	TError,
 	{
 		pathParams: UpdateSystemDashboardPathParameters;
-		data: BodyType<DashboardtypesUpdatableSystemDashboardDTO>;
+		data: BodyType<DashboardtypesStorableDashboardDataDTO>;
 	},
 	TContext
 > => {
@@ -186,7 +186,7 @@ export const getUpdateSystemDashboardMutationOptions = <
 		Awaited<ReturnType<typeof updateSystemDashboard>>,
 		{
 			pathParams: UpdateSystemDashboardPathParameters;
-			data: BodyType<DashboardtypesUpdatableSystemDashboardDTO>;
+			data: BodyType<DashboardtypesStorableDashboardDataDTO>;
 		}
 	> = (props) => {
 		const { pathParams, data } = props ?? {};
@@ -201,7 +201,7 @@ export type UpdateSystemDashboardMutationResult = NonNullable<
 	Awaited<ReturnType<typeof updateSystemDashboard>>
 >;
 export type UpdateSystemDashboardMutationBody =
-	BodyType<DashboardtypesUpdatableSystemDashboardDTO>;
+	BodyType<DashboardtypesStorableDashboardDataDTO>;
 export type UpdateSystemDashboardMutationError =
 	ErrorType<RenderErrorResponseDTO>;
 
@@ -217,7 +217,7 @@ export const useUpdateSystemDashboard = <
 		TError,
 		{
 			pathParams: UpdateSystemDashboardPathParameters;
-			data: BodyType<DashboardtypesUpdatableSystemDashboardDTO>;
+			data: BodyType<DashboardtypesStorableDashboardDataDTO>;
 		},
 		TContext
 	>;
@@ -226,7 +226,7 @@ export const useUpdateSystemDashboard = <
 	TError,
 	{
 		pathParams: UpdateSystemDashboardPathParameters;
-		data: BodyType<DashboardtypesUpdatableSystemDashboardDTO>;
+		data: BodyType<DashboardtypesStorableDashboardDataDTO>;
 	},
 	TContext
 > => {
@@ -235,7 +235,7 @@ export const useUpdateSystemDashboard = <
 	return useMutation(mutationOptions);
 };
 /**
- * This endpoint drops any customisation to the system dashboard, writes the defaults back, and returns the freshly seeded dashboard.
+ * This resets edited/updated system dashboard to default system dashboard.
  * @summary Reset system dashboard to defaults
  */
 export const resetSystemDashboard = (
@@ -243,7 +243,7 @@ export const resetSystemDashboard = (
 	signal?: AbortSignal,
 ) => {
 	return GeneratedAPIInstance<ResetSystemDashboard200>({
-		url: `/api/v1/system/${source}/dashboard/reset`,
+		url: `/api/v1/system/${source}/reset`,
 		method: 'POST',
 		signal,
 	});
