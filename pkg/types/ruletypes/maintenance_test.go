@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/SigNoz/signoz/pkg/valuer"
+	"github.com/prometheus/common/model"
 )
 
 func TestShouldSkipMaintenance(t *testing.T) {
@@ -660,7 +661,7 @@ func TestShouldSkipMaintenance(t *testing.T) {
 	}
 
 	for idx, c := range cases {
-		result := c.maintenance.ShouldSkip(c.name, c.ts)
+		result := c.maintenance.ShouldSkip(c.name, c.ts, model.LabelSet{})
 		if result != c.skip {
 			t.Errorf("skip %v, got %v, case:%d - %s", c.skip, result, idx, c.name)
 		}
