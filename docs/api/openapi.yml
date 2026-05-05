@@ -4556,6 +4556,8 @@ components:
           type: string
         kind:
           $ref: '#/components/schemas/RuletypesMaintenanceKind'
+        labelExpression:
+          type: string
         name:
           type: string
         schedule:
@@ -4582,6 +4584,8 @@ components:
           nullable: true
           type: array
         description:
+          type: string
+        labelExpression:
           type: string
         name:
           type: string
