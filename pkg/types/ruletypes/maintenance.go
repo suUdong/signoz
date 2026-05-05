@@ -9,6 +9,8 @@ import (
 	"github.com/SigNoz/signoz/pkg/types"
 	"github.com/SigNoz/signoz/pkg/valuer"
 	"github.com/expr-lang/expr"
+	"github.com/prometheus/alertmanager/api/v2/models"
+	"github.com/prometheus/common/model"
 	"github.com/uptrace/bun"
 )
 
@@ -137,7 +139,7 @@ type PlannedMaintenanceWithRules struct {
 	Rules                       []*StorablePlannedMaintenanceRule `bun:"rel:has-many,join:id=planned_maintenance_id"`
 }
 
-func (m *PlannedMaintenance) ShouldSkip(ruleID string, now time.Time, labels map[string]string) bool {
+func (m *PlannedMaintenance) ShouldSkip(ruleID string, now time.Time, lset model.LabelSet) bool {
 	// Check if the alert ID is in the maintenance window
 	found := false
 	if len(m.RuleIDs) > 0 {
@@ -161,10 +163,10 @@ func (m *PlannedMaintenance) ShouldSkip(ruleID string, now time.Time, labels map
 		return false
 	}
 
-	// labels is nil when called from IsActive (no instance labels available);
+	// lset is empty when called from IsActive (no instance labels available);
 	// skip expression filtering in that case.
-	if m.LabelExpression != "" && labels != nil {
-		if !evalLabelExpression(m.LabelExpression, labels) {
+	if m.LabelExpression != "" && len(lset) != 0 {
+		if !evalLabelExpression(m.LabelExpression, lset) {
 			return false
 		}
 	}
@@ -212,11 +214,11 @@ func (m *PlannedMaintenance) isScheduleActive(now time.Time) bool {
 	return false
 }
 
-// evalLabelExpression compiles and runs expression against the provided labels.
+// evalLabelExpression compiles and runs the expression against the provided labels.
 // Returns false on any error (safety-first: don't suppress on a bad expression).
-func evalLabelExpression(expression string, labels map[string]string) bool {
-	env := make(map[string]interface{}, len(labels))
-	for k, v := range labels {
+func evalLabelExpression(expression string, lset models.LabelSet) bool {
+	env := make(map[string]interface{}, len(lset))
+	for k, v := range lset {
 		env[k] = v
 	}
 	program, err := expr.Compile(expression, expr.Env(env), expr.AllowUndefinedVariables())
