@@ -12,6 +12,7 @@ import AlertActionButtons from './ActionButtons/ActionButtons';
 import AlertLabels from './AlertLabels/AlertLabels';
 import AlertSeverity from './AlertSeverity/AlertSeverity';
 import AlertState from './AlertState/AlertState';
+import AlertResponseContext from './ResponseContext/AlertResponseContext';
 
 import './AlertHeader.styles.scss';
 
@@ -19,7 +20,7 @@ export type AlertHeaderProps = {
 	alertDetails: RuletypesRuleDTO | PostableAlertRuleV2;
 };
 function AlertHeader({ alertDetails }: AlertHeaderProps): JSX.Element {
-	const { state, alert: alertName, labels } = alertDetails;
+	const { state, alert: alertName, labels, annotations } = alertDetails;
 	const { alertRuleState } = useAlertRule();
 	const [updatedName, setUpdatedName] = useState(alertName);
 
@@ -59,7 +60,14 @@ function AlertHeader({ alertDetails }: AlertHeaderProps): JSX.Element {
 
 	return (
 		<div className="alert-info">
-			{isV2Alert ? <CreateAlertV2Header /> : CreateAlertV1Header}
+			<div className="alert-info__content">
+				{isV2Alert ? <CreateAlertV2Header /> : CreateAlertV1Header}
+				<AlertResponseContext
+					alertName={updatedName || alertName}
+					annotations={annotations}
+					labels={labels}
+				/>
+			</div>
 			<div className="alert-info__action-buttons">
 				<AlertActionButtons
 					alertDetails={alertDetails}

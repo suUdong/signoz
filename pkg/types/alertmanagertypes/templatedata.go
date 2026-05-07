@@ -72,12 +72,13 @@ type ExpandResult struct {
 // $rule.threshold.value, or $log.url. JSON tags use camelCase for the wire
 // format.
 type AlertData struct {
-	Alert       AlertInfo   `json:"alert"       mapstructure:"alert"`
-	Rule        RuleInfo    `json:"rule"        mapstructure:"rule"`
-	Log         LinkInfo    `json:"log"         mapstructure:"log"`
-	Trace       LinkInfo    `json:"trace"       mapstructure:"trace"`
-	Labels      template.KV `json:"labels"      mapstructure:"labels"`
-	Annotations template.KV `json:"annotations" mapstructure:"annotations"`
+	Alert       AlertInfo    `json:"alert"       mapstructure:"alert"`
+	Rule        RuleInfo     `json:"rule"        mapstructure:"rule"`
+	Incident    IncidentInfo `json:"incident"    mapstructure:"incident"`
+	Log         LinkInfo     `json:"log"         mapstructure:"log"`
+	Trace       LinkInfo     `json:"trace"       mapstructure:"trace"`
+	Labels      template.KV  `json:"labels"      mapstructure:"labels"`
+	Annotations template.KV  `json:"annotations" mapstructure:"annotations"`
 }
 
 // AlertInfo holds the per-alert state and timing data.
@@ -123,6 +124,7 @@ type LinkInfo struct {
 type NotificationTemplateData struct {
 	Alert             NotificationAlert `json:"alert"             mapstructure:"alert"`
 	Rule              RuleInfo          `json:"rule"              mapstructure:"rule"`
+	Incident          IncidentInfo      `json:"incident"          mapstructure:"incident"`
 	Labels            template.KV       `json:"labels"            mapstructure:"labels"`
 	Annotations       template.KV       `json:"annotations"       mapstructure:"annotations"`
 	CommonLabels      template.KV       `json:"commonLabels"      mapstructure:"common_labels"`

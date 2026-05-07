@@ -234,6 +234,7 @@ func (at *templater) buildNotificationTemplateData(
 			TotalResolved: resolved,
 		},
 		Rule:              buildRuleInfo(commonLabels, commonAnnotations),
+		Incident:          alertmanagertypes.BuildIncidentInfo(labels, annotations),
 		GroupLabels:       gl,
 		CommonLabels:      commonLabels,
 		CommonAnnotations: commonAnnotations,
@@ -255,6 +256,7 @@ func buildAlertData(a *types.Alert, receiver string) alertmanagertypes.AlertData
 	for k, v := range a.Annotations {
 		annotations[string(k)] = string(v)
 	}
+	publicAnnotations := alertmanagertypes.FilterPublicAnnotations(annotations)
 
 	return alertmanagertypes.AlertData{
 		Alert: alertmanagertypes.AlertInfo{
@@ -270,13 +272,14 @@ func buildAlertData(a *types.Alert, receiver string) alertmanagertypes.AlertData
 			IsMissingData: labels[ruletypes.LabelNoData] == "true",
 			IsRecovering:  labels[ruletypes.LabelIsRecovering] == "true",
 		},
-		Rule:   buildRuleInfo(labels, annotations),
-		Log:    alertmanagertypes.LinkInfo{URL: annotations[ruletypes.AnnotationRelatedLogs]},
-		Trace:  alertmanagertypes.LinkInfo{URL: annotations[ruletypes.AnnotationRelatedTraces]},
-		Labels: labels,
+		Rule:     buildRuleInfo(labels, annotations),
+		Incident: alertmanagertypes.BuildIncidentInfo(labels, publicAnnotations),
+		Log:      alertmanagertypes.LinkInfo{URL: annotations[ruletypes.AnnotationRelatedLogs]},
+		Trace:    alertmanagertypes.LinkInfo{URL: annotations[ruletypes.AnnotationRelatedTraces]},
+		Labels:   labels,
 		// Strip private annotations once the structured fields above have
 		// been populated from the raw map.
-		Annotations: alertmanagertypes.FilterPublicAnnotations(annotations),
+		Annotations: publicAnnotations,
 	}
 }
 

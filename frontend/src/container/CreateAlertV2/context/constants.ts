@@ -22,6 +22,7 @@ import {
 export const INITIAL_ALERT_STATE: AlertState = {
 	name: '',
 	labels: {},
+	annotations: {},
 	yAxisUnit: undefined,
 };
 

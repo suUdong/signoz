@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/SigNoz/signoz/pkg/errors"
+	"github.com/SigNoz/signoz/pkg/types/alertmanagertypes"
 	commoncfg "github.com/prometheus/common/config"
 
 	"github.com/prometheus/alertmanager/config"
@@ -56,6 +57,11 @@ func New(conf *config.WebhookConfig, t *template.Template, l *slog.Logger, httpO
 type Message struct {
 	*template.Data
 
+	// Incident carries the DS-APM/SI-SM context extracted from common alert
+	// labels and annotations, so webhook consumers do not need to know the
+	// individual SigNoz metadata keys.
+	Incident *alertmanagertypes.IncidentInfo `json:"incident,omitempty"`
+
 	// The protocol version.
 	Version         string `json:"version"`
 	GroupKey        string `json:"groupKey"`
@@ -83,11 +89,15 @@ func (n *Notifier) Notify(ctx context.Context, alerts ...*types.Alert) (bool, er
 	logger := n.logger.With(slog.Any("group_key", groupKey))
 	logger.DebugContext(ctx, "extracted group key")
 
+	incident := alertmanagertypes.BuildIncidentInfo(data.CommonLabels, data.CommonAnnotations)
 	msg := &Message{
 		Version:         "4",
 		Data:            data,
 		GroupKey:        groupKey.String(),
 		TruncatedAlerts: numTruncated,
+	}
+	if !incident.IsZero() {
+		msg.Incident = &incident
 	}
 
 	var buf bytes.Buffer

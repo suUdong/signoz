@@ -115,6 +115,54 @@ func (provider *provider) addRulerRoutes(router *mux.Router) error {
 		return err
 	}
 
+	if err := router.Handle("/api/v2/rules/notification_template/preview", handler.New(provider.authZ.EditAccess(provider.rulerHandler.PreviewNotificationTemplate), handler.OpenAPIDef{
+		ID:                  "PreviewNotificationTemplate",
+		Tags:                []string{"rules"},
+		Summary:             "Preview alert notification template",
+		Description:         "This endpoint renders a notification message template against the rule labels and annotations without sending a notification",
+		Request:             new(ruletypes.PreviewNotificationTemplateRequest),
+		RequestContentType:  "application/json",
+		Response:            new(ruletypes.PreviewNotificationTemplateResponse),
+		ResponseContentType: "application/json",
+		SuccessStatusCode:   http.StatusOK,
+		ErrorStatusCodes:    []int{http.StatusBadRequest},
+		SecuritySchemes:     newSecuritySchemes(types.RoleEditor),
+	})).Methods(http.MethodPost).GetError(); err != nil {
+		return err
+	}
+
+	if err := router.Handle("/api/v2/rules/sop/preview", handler.New(provider.authZ.EditAccess(provider.rulerHandler.PreviewSOP), handler.OpenAPIDef{
+		ID:                  "PreviewSOP",
+		Tags:                []string{"rules"},
+		Summary:             "Preview alert SOP binding",
+		Description:         "This endpoint previews SOP source, binding, search, preview metadata, and service-account/API auth boundary guidance for an alert rule without fetching an external SOP document",
+		Request:             new(ruletypes.PreviewSOPRequest),
+		RequestContentType:  "application/json",
+		Response:            new(ruletypes.PreviewSOPResponse),
+		ResponseContentType: "application/json",
+		SuccessStatusCode:   http.StatusOK,
+		ErrorStatusCodes:    []int{http.StatusBadRequest},
+		SecuritySchemes:     newSecuritySchemes(types.RoleEditor),
+	})).Methods(http.MethodPost).GetError(); err != nil {
+		return err
+	}
+
+	if err := router.Handle("/api/v2/rules/sop/pilot/managed_markdown/fetch", handler.New(provider.authZ.EditAccess(provider.rulerHandler.FetchPilotManagedMarkdownSOP), handler.OpenAPIDef{
+		ID:                  "FetchPilotManagedMarkdownSOP",
+		Tags:                []string{"rules"},
+		Summary:             "Fetch a managed Markdown SOP for pilot validation",
+		Description:         "This pilot endpoint fetches an inline managed Markdown SOP source only after the audit-required server-side contract is accepted; it does not persist sources, call external connectors, or accept browser credentials",
+		Request:             new(ruletypes.PilotManagedMarkdownSOPFetchRequest),
+		RequestContentType:  "application/json",
+		Response:            new(ruletypes.PilotSOPFetchResponse),
+		ResponseContentType: "application/json",
+		SuccessStatusCode:   http.StatusOK,
+		ErrorStatusCodes:    []int{http.StatusBadRequest},
+		SecuritySchemes:     newSecuritySchemes(types.RoleEditor),
+	})).Methods(http.MethodPost).GetError(); err != nil {
+		return err
+	}
+
 	if err := router.Handle("/api/v1/downtime_schedules", handler.New(provider.authZ.ViewAccess(provider.rulerHandler.ListDowntimeSchedules), handler.OpenAPIDef{
 		ID:                  "ListDowntimeSchedules",
 		Tags:                []string{"downtimeschedules"},

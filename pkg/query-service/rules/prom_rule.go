@@ -177,7 +177,7 @@ func (r *PromRule) Eval(ctx context.Context, ts time.Time) (int, error) {
 
 		threshold := valueFormatter.Format(result.Target, result.TargetUnit)
 
-		tmplData := ruletypes.AlertTemplateData(l, valueFormatter.Format(result.V, r.Unit()), threshold)
+		tmplData := ruletypes.AlertTemplateDataWithIncident(l, r.annotations.Map(), valueFormatter.Format(result.V, r.Unit()), threshold)
 		// Inject some convenience variables that are easier to remember for users
 		// who are not used to Go's templating system.
 		defs := "{{$labels := .Labels}}{{$value := .Value}}{{$threshold := .Threshold}}"

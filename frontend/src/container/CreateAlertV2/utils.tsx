@@ -341,6 +341,7 @@ export function getCreateAlertLocalStateFromAlertDef(
 		...INITIAL_ALERT_STATE,
 		name: alertDef.alert,
 		labels: alertDef.labels || {},
+		annotations: alertDef.annotations || {},
 		yAxisUnit: alertDef.condition.compositeQuery.unit,
 	};
 

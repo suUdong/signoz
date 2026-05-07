@@ -184,6 +184,54 @@ func (handler *handler) TestRule(rw http.ResponseWriter, req *http.Request) {
 	render.Success(rw, http.StatusOK, ruletypes.GettableTestRule{AlertCount: alertCount, Message: "notification sent"})
 }
 
+func (handler *handler) PreviewNotificationTemplate(rw http.ResponseWriter, req *http.Request) {
+	ctx, cancel := context.WithTimeout(req.Context(), 30*time.Second)
+	defer cancel()
+
+	var previewReq ruletypes.PreviewNotificationTemplateRequest
+	if err := binding.JSON.BindBody(req.Body, &previewReq); err != nil {
+		render.Error(rw, err)
+		return
+	}
+	defer req.Body.Close() //nolint:errcheck
+
+	preview, err := ruletypes.PreviewNotificationTemplate(ctx, previewReq)
+	if err != nil {
+		render.Error(rw, err)
+		return
+	}
+
+	render.Success(rw, http.StatusOK, preview)
+}
+
+func (handler *handler) PreviewSOP(rw http.ResponseWriter, req *http.Request) {
+	var previewReq ruletypes.PreviewSOPRequest
+	if err := binding.JSON.BindBody(req.Body, &previewReq); err != nil {
+		render.Error(rw, err)
+		return
+	}
+	defer req.Body.Close() //nolint:errcheck
+
+	render.Success(rw, http.StatusOK, ruletypes.PreviewSOP(previewReq))
+}
+
+func (handler *handler) FetchPilotManagedMarkdownSOP(rw http.ResponseWriter, req *http.Request) {
+	var fetchReq ruletypes.PilotManagedMarkdownSOPFetchRequest
+	if err := binding.JSON.BindBody(req.Body, &fetchReq); err != nil {
+		render.Error(rw, err)
+		return
+	}
+	defer req.Body.Close() //nolint:errcheck
+
+	resp, err := ruletypes.FetchPilotManagedMarkdownSOP(fetchReq.Source, fetchReq.Fetch)
+	if err != nil {
+		render.Error(rw, errors.WrapInvalidInputf(err, errors.CodeInvalidInput, "pilot managed markdown SOP fetch validation failed"))
+		return
+	}
+
+	render.Success(rw, http.StatusOK, resp)
+}
+
 func (handler *handler) ListDowntimeSchedules(rw http.ResponseWriter, req *http.Request) {
 	ctx, cancel := context.WithTimeout(req.Context(), 30*time.Second)
 	defer cancel()

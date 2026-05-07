@@ -72,6 +72,21 @@ describe('CreateAlertV2 Context Utils', () => {
 			});
 		});
 
+		it('should set alert annotations', () => {
+			const annotations = {
+				impact_summary: 'Checkout failures may affect customers.',
+				next_action: 'Ask the vendor to check payment-api traces.',
+			};
+			const result = alertCreationReducer(INITIAL_ALERT_STATE, {
+				type: 'SET_ALERT_ANNOTATIONS',
+				payload: annotations,
+			});
+			expect(result).toEqual({
+				...INITIAL_ALERT_STATE,
+				annotations,
+			});
+		});
+
 		it('should set y-axis unit', () => {
 			const result = alertCreationReducer(INITIAL_ALERT_STATE, {
 				type: 'SET_Y_AXIS_UNIT',
@@ -87,6 +102,7 @@ describe('CreateAlertV2 Context Utils', () => {
 			const modifiedState: AlertState = {
 				name: 'Modified',
 				labels: { test: 'value' },
+				annotations: { impact_summary: 'impact' },
 				yAxisUnit: 'ms',
 			};
 			const result = alertCreationReducer(modifiedState, { type: 'RESET' });
@@ -97,6 +113,7 @@ describe('CreateAlertV2 Context Utils', () => {
 			const newState: AlertState = {
 				name: 'Custom Alert',
 				labels: { env: 'production' },
+				annotations: { customer_update: 'customer update' },
 				yAxisUnit: 'bytes',
 			};
 			const result = alertCreationReducer(INITIAL_ALERT_STATE, {

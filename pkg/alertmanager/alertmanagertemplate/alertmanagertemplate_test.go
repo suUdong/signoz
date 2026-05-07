@@ -285,3 +285,65 @@ Description: Request rate exceeded 10k/s`},
 		})
 	}
 }
+
+func TestExpandBuildsIncidentContext(t *testing.T) {
+	at, ctx := testSetup(t)
+
+	got, err := at.Expand(
+		ctx,
+		alertmanagertypes.ExpandRequest{
+			TitleTemplate: "[$incident.environment] $incident.service_name impact — $incident.sop_id",
+			BodyTemplate:  "Impact: $incident.impact_summary\nNext: $incident.next_action\nOwner: $incident.owner_team\nVendor: $incident.vendor_request\nSOP: $incident.sop_title <$incident.sop_url>\nSource: $incident.sop_source",
+		},
+		[]*types.Alert{
+			createAlert(
+				map[string]string{
+					ruletypes.LabelAlertName:                   "CheckoutLatencyHigh",
+					alertmanagertypes.IncidentLabelProjectID:   "customer-a",
+					alertmanagertypes.IncidentLabelEnvironment: "prod",
+					alertmanagertypes.IncidentLabelServiceName: "checkout-api",
+					alertmanagertypes.IncidentLabelOwnerTeam:   "sm-payments",
+					alertmanagertypes.IncidentLabelSeverity:    "critical",
+					alertmanagertypes.IncidentLabelSopID:       "SOP-PAY-001",
+				},
+				map[string]string{
+					alertmanagertypes.IncidentAnnotationImpactSummary:  "Checkout latency can affect customer payments.",
+					alertmanagertypes.IncidentAnnotationNextAction:     "Ask vendor to inspect slow traces.",
+					alertmanagertypes.IncidentAnnotationVendorRequest:  "Need cause, mitigation, and ETA.",
+					alertmanagertypes.IncidentAnnotationCustomerUpdate: "Payment latency is under investigation.",
+					alertmanagertypes.IncidentAnnotationSopURL:         "https://runbooks.example.com/payment-latency",
+					alertmanagertypes.IncidentAnnotationSopSource:      "confluence",
+					alertmanagertypes.IncidentAnnotationSopTitle:       "Payment API 5xx response",
+					alertmanagertypes.IncidentAnnotationSopVersion:     "2026-04-20.3",
+					alertmanagertypes.IncidentAnnotationSopBindingID:   "payment-api-prod-critical",
+					ruletypes.AnnotationBodyTemplate:                   "internal template text",
+				},
+				true,
+			),
+		},
+	)
+	require.NoError(t, err)
+
+	require.Equal(t, "[prod] checkout-api impact — SOP-PAY-001", got.Title)
+	require.Equal(t, []string{
+		"Impact: Checkout latency can affect customer payments.\nNext: Ask vendor to inspect slow traces.\nOwner: sm-payments\nVendor: Need cause, mitigation, and ETA.\nSOP: Payment API 5xx response <https://runbooks.example.com/payment-latency>\nSource: confluence",
+	}, got.Body)
+	require.Equal(t, alertmanagertypes.IncidentInfo{
+		ProjectID:      "customer-a",
+		Environment:    "prod",
+		ServiceName:    "checkout-api",
+		OwnerTeam:      "sm-payments",
+		Severity:       "critical",
+		ImpactSummary:  "Checkout latency can affect customer payments.",
+		NextAction:     "Ask vendor to inspect slow traces.",
+		VendorRequest:  "Need cause, mitigation, and ETA.",
+		CustomerUpdate: "Payment latency is under investigation.",
+		SopID:          "SOP-PAY-001",
+		SopURL:         "https://runbooks.example.com/payment-latency",
+		SopSource:      "confluence",
+		SopTitle:       "Payment API 5xx response",
+		SopVersion:     "2026-04-20.3",
+		SopBindingID:   "payment-api-prod-critical",
+	}, got.NotificationData.Incident)
+	require.NotContains(t, got.NotificationData.Alerts[0].Annotations, ruletypes.AnnotationBodyTemplate)
+}

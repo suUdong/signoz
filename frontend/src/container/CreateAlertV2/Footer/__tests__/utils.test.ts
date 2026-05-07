@@ -522,6 +522,33 @@ describe('Footer utils', () => {
 			expect(props.ruleType).toBe('promql_rule');
 		});
 
+		it('preserves PM incident briefing annotations in the submit payload', () => {
+			const currentArgs: BuildCreateAlertRulePayloadArgs = {
+				...INITIAL_BUILD_CREATE_ALERT_RULE_PAYLOAD_ARGS,
+				basicAlertState: {
+					...INITIAL_BUILD_CREATE_ALERT_RULE_PAYLOAD_ARGS.basicAlertState,
+					annotations: {
+						customer_update: 'We are investigating increased checkout errors.',
+						impact_summary: 'Checkout failures may affect customers.',
+						next_action: 'Ask vendor to inspect payment-api traces.',
+						vendor_request: 'Share suspected cause, mitigation, and ETA.',
+					},
+				},
+			};
+			const props = buildCreateThresholdAlertRulePayload(currentArgs);
+
+			expect(props.annotations).toMatchObject({
+				customer_update: 'We are investigating increased checkout errors.',
+				description:
+					'This alert is fired when the defined metric (current value: {{$value}}) crosses the threshold ({{$threshold}})',
+				impact_summary: 'Checkout failures may affect customers.',
+				next_action: 'Ask vendor to inspect payment-api traces.',
+				summary:
+					'This alert is fired when the defined metric (current value: {{$value}}) crosses the threshold ({{$threshold}})',
+				vendor_request: 'Share suspected cause, mitigation, and ETA.',
+			});
+		});
+
 		// Backward compatibility: a rule loaded with a legacy op/matchType
 		// serialization ("1", ">", "eq", "above_or_equal", ...) must round-trip
 		// back to the backend unchanged when the user hasn't touched those

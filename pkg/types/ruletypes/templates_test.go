@@ -83,3 +83,37 @@ func TestTemplateExpander_WithVariableSyntax(t *testing.T) {
 	}
 	require.Equal(t, "test my-service exceeds 100 and observed at 200", result)
 }
+
+func TestTemplateExpander_WithIncidentSyntax(t *testing.T) {
+	defs := "{{$labels := .Labels}}{{$value := .Value}}{{$threshold := .Threshold}}"
+	data := AlertTemplateDataWithIncident(
+		map[string]string{
+			"project_id":   "customer-a",
+			"service.name": "checkout-api",
+			"owner_team":   "sm-payments",
+			"severity":     "critical",
+			"sop_id":       "SOP-PAY-001",
+		},
+		map[string]string{
+			"impact_summary": "Checkout latency can affect customer payments.",
+			"next_action":    "Ask vendor to inspect slow traces.",
+			"sop_source":     "confluence",
+			"sop_title":      "Payment API 5xx response",
+			"sop_url":        "https://runbooks.example.com/payment-latency",
+		},
+		"200",
+		"100",
+	)
+	expander := NewTemplateExpander(
+		context.Background(),
+		defs+"[$incident.project_id][$incident.service_name][$incident.sop_id] $incident.impact_summary Next: {{$incident.next_action}} SOP: $incident.sop_title <$incident.sop_url> Source: $incident.sop_source",
+		"test",
+		data,
+		nil,
+	)
+	result, err := expander.Expand()
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, "[customer-a][checkout-api][SOP-PAY-001] Checkout latency can affect customer payments. Next: Ask vendor to inspect slow traces. SOP: Payment API 5xx response <https://runbooks.example.com/payment-latency> Source: confluence", result)
+}

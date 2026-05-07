@@ -302,7 +302,7 @@ func (r *ThresholdRule) Eval(ctx context.Context, ts time.Time) (int, error) {
 			slog.String("alert.value", value), slog.String("alert.threshold", threshold),
 		)
 
-		tmplData := ruletypes.AlertTemplateData(l, value, threshold)
+		tmplData := ruletypes.AlertTemplateDataWithIncident(l, r.annotations.Map(), value, threshold)
 		// Inject some convenience variables that are easier to remember for users
 		// who are not used to Go's templating system.
 		defs := "{{$labels := .Labels}}{{$value := .Value}}{{$threshold := .Threshold}}"

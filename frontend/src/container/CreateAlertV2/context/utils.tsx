@@ -53,6 +53,11 @@ export const alertCreationReducer = (
 				...state,
 				labels: action.payload,
 			};
+		case 'SET_ALERT_ANNOTATIONS':
+			return {
+				...state,
+				annotations: action.payload,
+			};
 		case 'SET_Y_AXIS_UNIT':
 			return {
 				...state,

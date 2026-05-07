@@ -7,6 +7,7 @@ package webhook
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,6 +25,8 @@ import (
 	"github.com/prometheus/alertmanager/notify"
 	"github.com/prometheus/alertmanager/notify/test"
 	"github.com/prometheus/alertmanager/types"
+
+	"github.com/SigNoz/signoz/pkg/types/alertmanagertypes"
 )
 
 func TestWebhookRetry(t *testing.T) {
@@ -215,4 +218,75 @@ func TestWebhookURLTemplating(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWebhookIncludesIncidentContext(t *testing.T) {
+	var payload struct {
+		Incident *alertmanagertypes.IncidentInfo `json:"incident"`
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	notifier, err := New(
+		&config.WebhookConfig{
+			URL:        config.SecretTemplateURL(srv.URL),
+			HTTPConfig: &commoncfg.HTTPClientConfig{},
+		},
+		test.CreateTmpl(t),
+		promslog.NewNopLogger(),
+	)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	ctx = notify.WithGroupKey(ctx, "test-group")
+	ctx = notify.WithGroupLabels(ctx, model.LabelSet{"alertname": "CheckoutLatencyHigh"})
+
+	_, err = notifier.Notify(ctx, &types.Alert{
+		Alert: model.Alert{
+			Labels: model.LabelSet{
+				"alertname": "CheckoutLatencyHigh",
+				model.LabelName(alertmanagertypes.IncidentLabelProjectID):   "customer-a",
+				model.LabelName(alertmanagertypes.IncidentLabelEnvironment): "prod",
+				model.LabelName(alertmanagertypes.IncidentLabelServiceName): "checkout-api",
+				model.LabelName(alertmanagertypes.IncidentLabelOwnerTeam):   "sm-payments",
+				model.LabelName(alertmanagertypes.IncidentLabelSeverity):    "critical",
+				model.LabelName(alertmanagertypes.IncidentLabelSopID):       "SOP-PAY-001",
+			},
+			Annotations: model.LabelSet{
+				model.LabelName(alertmanagertypes.IncidentAnnotationImpactSummary):  "Checkout latency can affect customer payments.",
+				model.LabelName(alertmanagertypes.IncidentAnnotationNextAction):     "Ask vendor to inspect slow traces.",
+				model.LabelName(alertmanagertypes.IncidentAnnotationVendorRequest):  "Need cause, mitigation, and ETA.",
+				model.LabelName(alertmanagertypes.IncidentAnnotationCustomerUpdate): "Payment latency is under investigation.",
+				model.LabelName(alertmanagertypes.IncidentAnnotationSopURL):         "https://runbooks.example.com/payment-latency",
+				model.LabelName(alertmanagertypes.IncidentAnnotationSopSource):      "confluence",
+				model.LabelName(alertmanagertypes.IncidentAnnotationSopTitle):       "Payment API 5xx response",
+				model.LabelName(alertmanagertypes.IncidentAnnotationSopVersion):     "2026-04-20.3",
+				model.LabelName(alertmanagertypes.IncidentAnnotationSopBindingID):   "payment-api-prod-critical",
+			},
+			StartsAt: time.Now(),
+			EndsAt:   time.Now().Add(time.Hour),
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, payload.Incident)
+	require.Equal(t, &alertmanagertypes.IncidentInfo{
+		ProjectID:      "customer-a",
+		Environment:    "prod",
+		ServiceName:    "checkout-api",
+		OwnerTeam:      "sm-payments",
+		Severity:       "critical",
+		ImpactSummary:  "Checkout latency can affect customer payments.",
+		NextAction:     "Ask vendor to inspect slow traces.",
+		VendorRequest:  "Need cause, mitigation, and ETA.",
+		CustomerUpdate: "Payment latency is under investigation.",
+		SopID:          "SOP-PAY-001",
+		SopURL:         "https://runbooks.example.com/payment-latency",
+		SopSource:      "confluence",
+		SopTitle:       "Payment API 5xx response",
+		SopVersion:     "2026-04-20.3",
+		SopBindingID:   "payment-api-prod-critical",
+	}, payload.Incident)
 }

@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/SigNoz/signoz/pkg/errors"
+	"github.com/SigNoz/signoz/pkg/types/alertmanagertypes"
 
 	htmltpl "html/template"
 	texttpl "text/template"
@@ -221,6 +222,13 @@ func NewTemplateExpander(
 
 // AlertTemplateData returns the interface to be used in expanding the template.
 func AlertTemplateData(labels map[string]string, value string, threshold string) any {
+	return AlertTemplateDataWithIncident(labels, nil, value, threshold)
+}
+
+// AlertTemplateDataWithIncident returns the interface used in alert label and
+// annotation templates, including the DS-APM incident context derived from
+// rule labels and annotations.
+func AlertTemplateDataWithIncident(labels map[string]string, annotations map[string]string, value string, threshold string) any {
 	// This exists here for backwards compatibility.
 	// The labels map passed in no longer contains the normalized labels.
 	// To continue supporting the old way of referencing labels, we need to
@@ -234,13 +242,37 @@ func AlertTemplateData(labels map[string]string, value string, threshold string)
 
 	return struct {
 		Labels    map[string]string
+		Incident  map[string]string
 		Value     string
 		Threshold string
 	}{
 		Labels:    newLabels,
+		Incident:  incidentTemplateData(labels, annotations),
 		Value:     value,
 		Threshold: threshold,
 	}
+}
+
+func incidentTemplateData(labels map[string]string, annotations map[string]string) map[string]string {
+	incident := map[string]string{
+		"project_id":      labels[alertmanagertypes.IncidentLabelProjectID],
+		"environment":     labels[alertmanagertypes.IncidentLabelEnvironment],
+		"service_name":    labels[alertmanagertypes.IncidentLabelServiceName],
+		"owner_team":      labels[alertmanagertypes.IncidentLabelOwnerTeam],
+		"severity":        labels[alertmanagertypes.IncidentLabelSeverity],
+		"impact_summary":  annotations[alertmanagertypes.IncidentAnnotationImpactSummary],
+		"next_action":     annotations[alertmanagertypes.IncidentAnnotationNextAction],
+		"vendor_request":  annotations[alertmanagertypes.IncidentAnnotationVendorRequest],
+		"customer_update": annotations[alertmanagertypes.IncidentAnnotationCustomerUpdate],
+		"sop_id":          labels[alertmanagertypes.IncidentLabelSopID],
+		"sop_url":         annotations[alertmanagertypes.IncidentAnnotationSopURL],
+		"sop_source":      annotations[alertmanagertypes.IncidentAnnotationSopSource],
+		"sop_title":       annotations[alertmanagertypes.IncidentAnnotationSopTitle],
+		"sop_version":     annotations[alertmanagertypes.IncidentAnnotationSopVersion],
+		"sop_binding_id":  annotations[alertmanagertypes.IncidentAnnotationSopBindingID],
+	}
+
+	return incident
 }
 
 // preprocessTemplate preprocesses the template to replace our custom $variable syntax with the correct Go template syntax.
@@ -259,6 +291,9 @@ func (te *TemplateExpander) preprocessTemplate() {
 			return match
 		}
 		path := match[1:] // Remove the '$'
+		if strings.HasPrefix(path, "incident.") {
+			return fmt.Sprintf(`{{index .Incident "%s"}}`, strings.TrimPrefix(path, "incident."))
+		}
 		return fmt.Sprintf(`{{index $labels "%s"}}`, path)
 	})
 
@@ -278,12 +313,17 @@ func (te *TemplateExpander) preprocessTemplate() {
 	// skip the special case for {{$threshold}} and {{$value}}
 	reVariable := regexp.MustCompile(`{{\s*\$\s*([a-zA-Z0-9_.]+)\s*}}`)
 	te.text = reVariable.ReplaceAllStringFunc(te.text, func(match string) string {
-		if strings.HasPrefix(match, "{{$threshold}}") || strings.HasPrefix(match, "{{$value}}") {
+		variable := strings.TrimSpace(match)
+		variable = strings.TrimPrefix(variable, "{{")
+		variable = strings.TrimSuffix(variable, "}}")
+		variable = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(variable), "$"))
+
+		if variable == "threshold" || variable == "value" {
 			return match
 		}
-		// get the variable name from {{$variable}} syntax
-		variable := strings.TrimPrefix(match, "{{$")
-		variable = strings.TrimSuffix(variable, "}}")
+		if strings.HasPrefix(variable, "incident.") {
+			return fmt.Sprintf(`{{index .Incident "%s"}}`, strings.TrimPrefix(variable, "incident."))
+		}
 		return fmt.Sprintf(`{{index .Labels "%s"}}`, variable)
 	})
 }

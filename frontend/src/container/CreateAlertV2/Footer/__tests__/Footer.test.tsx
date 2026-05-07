@@ -41,6 +41,7 @@ const mockAlertContextState = createMockAlertContextState({
 	alertState: {
 		name: 'Test Alert',
 		labels: {},
+		annotations: {},
 		yAxisUnit: undefined,
 	},
 	thresholdState: {

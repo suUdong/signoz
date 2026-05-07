@@ -44,10 +44,7 @@ export interface PostableAlertRuleV2 {
 		};
 	};
 	labels?: Labels;
-	annotations?: {
-		description: string;
-		summary: string;
-	};
+	annotations?: Labels;
 	notificationSettings?: {
 		groupBy?: string[];
 		renotify?: {
