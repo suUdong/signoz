@@ -4232,12 +4232,9 @@ export interface DashboardtypesPostablePublicDashboardDTO {
 	timeRangeEnabled?: boolean;
 }
 
-/**
- * @nullable
- */
-export type DashboardtypesStorableDashboardDataDTO = {
+export interface DashboardtypesStorableDashboardDataDTO {
 	[key: string]: unknown;
-} | null;
+}
 
 export interface DashboardtypesUpdatablePublicDashboardDTO {
 	/**
@@ -9245,39 +9242,6 @@ export type UpdateSpanMapperPathParameters = {
 	groupId: string;
 	mapperId: string;
 };
-export type GetSystemDashboardPathParameters = {
-	source: string;
-};
-export type GetSystemDashboard200 = {
-	data: DashboardtypesDashboardDTO;
-	/**
-	 * @type string
-	 */
-	status: string;
-};
-
-export type UpdateSystemDashboardPathParameters = {
-	source: string;
-};
-export type UpdateSystemDashboard200 = {
-	data: DashboardtypesDashboardDTO;
-	/**
-	 * @type string
-	 */
-	status: string;
-};
-
-export type ResetSystemDashboardPathParameters = {
-	source: string;
-};
-export type ResetSystemDashboard200 = {
-	data: DashboardtypesDashboardDTO;
-	/**
-	 * @type string
-	 */
-	status: string;
-};
-
 export type ListUsersDeprecated200 = {
 	/**
 	 * @type array

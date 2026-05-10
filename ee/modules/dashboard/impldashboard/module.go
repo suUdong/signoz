@@ -138,6 +138,11 @@ func (module *module) Delete(ctx context.Context, orgID valuer.UUID, id valuer.U
 		return err
 	}
 
+	// Do not delete system dashboard, we can only reset system dashbard to default.
+	if dashboard.Source != "" {
+		return errors.Newf(errors.TypeInvalidInput, errors.CodeInvalidInput, "cannot delete system dashboard with source %s, use reset instead", dashboard.Source)
+	}
+
 	if dashboard.Locked {
 		return errors.New(errors.TypeInvalidInput, errors.CodeInvalidInput, "dashboard is locked, please unlock the dashboard to be delete it")
 	}
@@ -211,6 +216,14 @@ func (module *module) List(ctx context.Context, orgID valuer.UUID) ([]*dashboard
 
 func (module *module) Update(ctx context.Context, orgID valuer.UUID, id valuer.UUID, updatedBy string, data dashboardtypes.UpdatableDashboard, diff int) (*dashboardtypes.Dashboard, error) {
 	return module.pkgDashboardModule.Update(ctx, orgID, id, updatedBy, data, diff)
+}
+
+func (module *module) Reset(ctx context.Context, orgID valuer.UUID, source dashboardtypes.Source, updatedBy string) (*dashboardtypes.Dashboard, error) {
+	return module.pkgDashboardModule.Reset(ctx, orgID, source, updatedBy)
+}
+
+func (module *module) SetDefaultConfig(ctx context.Context, orgID valuer.UUID) error {
+	return module.pkgDashboardModule.SetDefaultConfig(ctx, orgID)
 }
 
 func (module *module) LockUnlock(ctx context.Context, orgID valuer.UUID, id valuer.UUID, updatedBy string, isAdmin bool, lock bool) error {
