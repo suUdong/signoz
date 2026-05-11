@@ -28,7 +28,7 @@ const alertLogEvents = (
 		page: 'Alert empty state page',
 	};
 
-	logEvent(title, dataSource ? { ...attributes, dataSource } : attributes);
+	void logEvent(title, dataSource ? { ...attributes, dataSource } : attributes);
 };
 
 export function AlertsEmptyState(): JSX.Element {
