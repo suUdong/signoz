@@ -6,10 +6,9 @@ import (
 )
 
 // PilotAuditEventSink is the hook contract for delivering DS-APM pilot audit
-// events to a downstream collector. The pilot scope intentionally ships only
-// the interface and a no-op implementation: persistence, transport, and
-// retry policy are out of scope for the contract slice and must be wired by
-// the operator surface in a later iteration.
+// events to a downstream collector. The pilot scope treats delivery as
+// best-effort: persistence can be wired by the operator surface, but retry
+// policy remains outside the request path.
 type PilotAuditEventSink interface {
 	Record(ctx context.Context, event PilotAuditEvent) error
 }

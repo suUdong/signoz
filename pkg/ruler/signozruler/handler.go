@@ -258,6 +258,11 @@ func (handler *handler) FetchPilotManagedMarkdownSOP(rw http.ResponseWriter, req
 		render.Error(rw, errors.WrapInvalidInputf(err, errors.CodeInvalidInput, "pilot managed markdown SOP fetch validation failed"))
 		return
 	}
+	if err := ruletypes.DispatchPilotAuditEvent(req.Context(), resp.AuditEvent); err != nil {
+		zap.L().Warn("pilot managed markdown SOP audit dispatch failed",
+			zap.Error(err),
+			zap.String("audit_event_id", resp.AuditEvent.EventID))
+	}
 
 	render.Success(rw, http.StatusOK, resp)
 }

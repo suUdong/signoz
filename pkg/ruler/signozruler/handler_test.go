@@ -2,15 +2,39 @@ package signozruler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/SigNoz/signoz/pkg/types/ruletypes"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/require"
 )
+
+type recordingPilotAuditSink struct {
+	mu     sync.Mutex
+	events []ruletypes.PilotAuditEvent
+	err    error
+}
+
+func (s *recordingPilotAuditSink) Record(_ context.Context, event ruletypes.PilotAuditEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.events = append(s.events, event)
+	return s.err
+}
+
+func (s *recordingPilotAuditSink) Events() []ruletypes.PilotAuditEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cp := make([]ruletypes.PilotAuditEvent, len(s.events))
+	copy(cp, s.events)
+	return cp
+}
 
 // validPilotManagedMarkdownSOPFetchRequestBody returns the canonical request
 // body fixture used by both happy-path and disable-flag tests. Factored out so
@@ -82,6 +106,45 @@ func TestFetchPilotManagedMarkdownSOPHandler(t *testing.T) {
 	require.Contains(t, got.Data.BodyMarkdown, "Restart payment-api")
 	require.False(t, got.Data.SecurityContext.BrowserCredentialsUsed)
 	require.False(t, got.Data.SecurityContext.SecretRefVisible)
+}
+
+func TestFetchPilotManagedMarkdownSOPHandlerDispatchesAuditEvent(t *testing.T) {
+	ruletypes.RegisterPilotAuditEventSink(nil)
+	t.Cleanup(func() { ruletypes.RegisterPilotAuditEventSink(nil) })
+
+	recorder := &recordingPilotAuditSink{}
+	ruletypes.RegisterPilotAuditEventSink(recorder)
+
+	body := validPilotManagedMarkdownSOPFetchRequestBody(t)
+	rw := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/rules/sop/pilot/managed_markdown/fetch", bytes.NewReader(body))
+
+	(&handler{}).FetchPilotManagedMarkdownSOP(rw, req)
+
+	require.Equal(t, http.StatusOK, rw.Code)
+	events := recorder.Events()
+	require.Len(t, events, 1)
+	require.Equal(t, "audit-20260430-000001", events[0].EventID)
+	require.Equal(t, ruletypes.PilotAuditOutcomeAllowed, events[0].Outcome)
+	require.Equal(t, "INC-20260430-001", events[0].RequestContext.IncidentID)
+	require.Equal(t, "payment-api", events[0].RequestContext.ServiceName)
+}
+
+func TestFetchPilotManagedMarkdownSOPHandlerAuditSinkFailureIsFailOpen(t *testing.T) {
+	ruletypes.RegisterPilotAuditEventSink(nil)
+	t.Cleanup(func() { ruletypes.RegisterPilotAuditEventSink(nil) })
+
+	recorder := &recordingPilotAuditSink{err: errors.New("audit sink unavailable")}
+	ruletypes.RegisterPilotAuditEventSink(recorder)
+
+	body := validPilotManagedMarkdownSOPFetchRequestBody(t)
+	rw := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/rules/sop/pilot/managed_markdown/fetch", bytes.NewReader(body))
+
+	(&handler{}).FetchPilotManagedMarkdownSOP(rw, req)
+
+	require.Equal(t, http.StatusOK, rw.Code)
+	require.Len(t, recorder.Events(), 1)
 }
 
 func TestFetchPilotManagedMarkdownSOPHandlerDisableFlag(t *testing.T) {
