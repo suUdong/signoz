@@ -1,6 +1,7 @@
 {
 	"general": "General",
 	"alert_channels": "Alert Channels",
+	"sop_documents": "SOP Documents",
 	"organization_settings": "Organization Settings",
 	"ingestion_settings": "Ingestion Settings",
 	"api_keys": "API Keys",

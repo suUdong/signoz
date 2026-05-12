@@ -24,6 +24,13 @@ describe('incidentTemplateVariables', () => {
 				'$incident.sop_title',
 				'$incident.sop_version',
 				'$incident.sop_binding_id',
+				'$incident.ai_strategy_id',
+				'$incident.ai_strategy_status',
+				'$incident.ai_headline',
+				'$incident.ai_first_actions',
+				'$incident.ai_confidence',
+				'$incident.ai_limitations',
+				'$incident.ai_evidence_refs',
 			]),
 		);
 	});
@@ -39,7 +46,7 @@ describe('incidentTemplateVariables', () => {
 	it('ignores supported incident variables', () => {
 		expect(
 			getUnknownIncidentTemplateVariables(
-				'Impact: $incident.impact_summary Next: $incident.next_action SOP: $incident.sop_id <$incident.sop_url> Source: $incident.sop_source',
+				'Impact: $incident.impact_summary Next: $incident.next_action SOP: $incident.sop_id <$incident.sop_url> Source: $incident.sop_source AI: $incident.ai_strategy_status $incident.ai_headline $incident.ai_first_actions $incident.ai_limitations',
 			),
 		).toStrictEqual([]);
 	});

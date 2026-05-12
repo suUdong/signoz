@@ -345,11 +345,21 @@ describe('CreateAlertHeader', () => {
 		renderCreateAlertHeader();
 
 		expect(screen.getByText('AI/evidence status')).toBeInTheDocument();
+		const strategyStatusInput = screen.getByTestId(
+			'evidence-metadata-ai_strategy_status',
+		);
+		const headlineInput = screen.getByTestId('evidence-metadata-ai_headline');
 		const statusInput = screen.getByTestId('evidence-metadata-evidence_status');
 		const generatedAtInput = screen.getByTestId(
 			'evidence-metadata-evidence_generated_at',
 		);
 
+		fireEvent.change(strategyStatusInput, {
+			target: { value: 'ready' },
+		});
+		fireEvent.change(headlineInput, {
+			target: { value: 'SOP 기준 결제 지연 확인이 필요합니다.' },
+		});
 		fireEvent.change(statusInput, {
 			target: { value: 'ready' },
 		});
@@ -357,6 +367,8 @@ describe('CreateAlertHeader', () => {
 			target: { value: '2026-04-26T14:06:00Z' },
 		});
 
+		expect(strategyStatusInput).toHaveValue('ready');
+		expect(headlineInput).toHaveValue('SOP 기준 결제 지연 확인이 필요합니다.');
 		expect(statusInput).toHaveValue('ready');
 		expect(generatedAtInput).toHaveValue('2026-04-26T14:06:00Z');
 	});
@@ -365,10 +377,16 @@ describe('CreateAlertHeader', () => {
 		renderCreateAlertHeader();
 
 		const statusInput = screen.getByTestId('evidence-metadata-evidence_status');
+		const strategyStatusInput = screen.getByTestId(
+			'evidence-metadata-ai_strategy_status',
+		);
 		const evidenceUrlInput = screen.getByTestId('evidence-metadata-evidence_url');
 
 		fireEvent.change(statusInput, {
 			target: { value: 'unknown' },
+		});
+		fireEvent.change(strategyStatusInput, {
+			target: { value: 'fabricated' },
 		});
 		fireEvent.change(evidenceUrlInput, {
 			target: { value: 'javascript:alert(1)' },
@@ -382,7 +400,13 @@ describe('CreateAlertHeader', () => {
 		expect(
 			screen.getByText('Use an http:// or https:// evidence URL.'),
 		).toBeInTheDocument();
+		expect(
+			screen.getByText(
+				'Use one of: ready, unavailable, timeout, blocked_by_policy, sop_missing, evidence_unavailable, low_confidence.',
+			),
+		).toBeInTheDocument();
 		expect(statusInput).toHaveAttribute('aria-invalid', 'true');
+		expect(strategyStatusInput).toHaveAttribute('aria-invalid', 'true');
 		expect(evidenceUrlInput).toHaveAttribute('aria-invalid', 'true');
 	});
 

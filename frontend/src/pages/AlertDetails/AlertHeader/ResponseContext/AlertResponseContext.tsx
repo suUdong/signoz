@@ -69,6 +69,7 @@ type ResponseContextSectionWithItems = {
 const COPY_SUCCESS_RESET_MS = 1500;
 
 const SECTION_COPY_LABELS: Record<string, string> = {
+	'AI strategy': 'Copy AI strategy',
 	'Evidence status': 'Copy evidence status',
 	'Incident briefing': 'Copy briefing',
 	'Response context': 'Copy context',
@@ -116,6 +117,20 @@ const SOP_METADATA_FIELDS: ResponseContextField[] = [
 		copyLabel: 'Copy SOP URL',
 		isUrl: true,
 	},
+];
+
+const AI_STRATEGY_FIELDS: ResponseContextField[] = [
+	{ key: 'ai_strategy_id', label: 'Strategy ID' },
+	{ key: 'ai_headline', label: 'Headline', isLongText: true },
+	{
+		key: 'ai_first_actions',
+		label: 'First actions',
+		copyLabel: 'Copy AI first actions',
+		isLongText: true,
+	},
+	{ key: 'ai_confidence', label: 'Confidence' },
+	{ key: 'ai_limitations', label: 'Limitations', isLongText: true },
+	{ key: 'ai_evidence_refs', label: 'Evidence refs', isLongText: true },
 ];
 
 function getSectionCopyText({
@@ -337,6 +352,40 @@ function getSopStatusSection({
 	};
 }
 
+function getAIStrategySection({
+	annotations,
+	labels,
+}: AlertResponseContextProps): ResponseContextSectionWithItems | undefined {
+	const statusValue = getMetadataValue({
+		annotations,
+		key: 'ai_strategy_status',
+		labels,
+	});
+	const strategyItems = AI_STRATEGY_FIELDS.map((field) => ({
+		...field,
+		value: getMetadataValue({ annotations, key: field.key, labels }),
+	})).filter((field): field is ResponseContextItem => Boolean(field.value));
+
+	if (!statusValue && !strategyItems.length) {
+		return undefined;
+	}
+
+	return {
+		title: 'AI strategy',
+		items: [
+			statusValue
+				? {
+						key: 'ai_strategy_status',
+						label: 'Status',
+						value: statusValue,
+						valueTone: statusValue === 'ready' ? 'success' : 'warning',
+					}
+				: undefined,
+			...strategyItems,
+		].filter((item): item is ResponseContextItem => Boolean(item)),
+	};
+}
+
 function getSectionsWithItems({
 	annotations,
 	labels,
@@ -354,14 +403,20 @@ function getSectionsWithItems({
 		annotations,
 		labels,
 	});
+	const aiStrategySection = getAIStrategySection({ annotations, labels });
 	const sopStatusSection = getSopStatusSection({
 		annotations,
 		labels,
-		shouldShowMissing: sections.length > 0 || Boolean(evidenceStatusSection),
+		shouldShowMissing:
+			sections.length > 0 ||
+			Boolean(evidenceStatusSection) ||
+			Boolean(aiStrategySection),
 	});
-	const resolvedSections = sopStatusSection
-		? [sopStatusSection, ...sections]
-		: sections;
+	const resolvedSections = [
+		...(sopStatusSection ? [sopStatusSection] : []),
+		...(aiStrategySection ? [aiStrategySection] : []),
+		...sections,
+	];
 
 	return evidenceStatusSection
 		? [...resolvedSections, evidenceStatusSection]

@@ -21,6 +21,7 @@ import {
 	Building,
 	Cpu,
 	CreditCard,
+	FileText,
 	Keyboard,
 	Pencil,
 	Plus,
@@ -31,6 +32,7 @@ import {
 } from 'lucide-react';
 import ChannelsEdit from 'pages/ChannelsEdit';
 import MembersSettings from 'pages/MembersSettings';
+import SOPDocuments from 'pages/SOPDocuments';
 import ServiceAccountsSettings from 'pages/ServiceAccountsSettings';
 import Shortcuts from 'pages/Shortcuts';
 
@@ -57,6 +59,19 @@ export const alertChannels = (t: TFunction): RouteTabProps['routes'] => [
 		),
 		route: ROUTES.ALL_CHANNELS,
 		key: ROUTES.ALL_CHANNELS,
+	},
+];
+
+export const sopDocumentsSettings = (t: TFunction): RouteTabProps['routes'] => [
+	{
+		Component: SOPDocuments,
+		name: (
+			<div className="periscope-tab">
+				<FileText size={16} /> {t('routes:sop_documents').toString()}
+			</div>
+		),
+		route: ROUTES.SOP_DOCUMENTS_SETTINGS,
+		key: ROUTES.SOP_DOCUMENTS_SETTINGS,
 	},
 ];
 

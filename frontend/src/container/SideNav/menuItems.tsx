@@ -16,6 +16,7 @@ import {
 	Cloudy,
 	DraftingCompass,
 	FileKey2,
+	FileText,
 	Github,
 	HardDrive,
 	Home,
@@ -323,6 +324,13 @@ export const settingsNavSections: SettingsNavSection[] = [
 				icon: <FileKey2 size={16} />,
 				isEnabled: true,
 				itemKey: 'notification-channels',
+			},
+			{
+				key: ROUTES.SOP_DOCUMENTS_SETTINGS,
+				label: 'SOP Documents',
+				icon: <FileText size={16} />,
+				isEnabled: true,
+				itemKey: 'sop-documents',
 			},
 			{
 				key: ROUTES.BILLING,

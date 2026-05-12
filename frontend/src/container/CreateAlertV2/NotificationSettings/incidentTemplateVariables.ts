@@ -65,6 +65,35 @@ export const INCIDENT_TEMPLATE_VARIABLES: IncidentTemplateVariable[] = [
 		variable: '$incident.sop_binding_id',
 		description: 'Environment/service/severity-specific SOP binding reference.',
 	},
+	{
+		variable: '$incident.ai_strategy_id',
+		description: 'Generated AI response strategy identifier.',
+	},
+	{
+		variable: '$incident.ai_strategy_status',
+		description: 'AI strategy state such as ready, timeout, or sop_missing.',
+	},
+	{
+		variable: '$incident.ai_headline',
+		description: 'SOP-grounded strategy headline for responders.',
+	},
+	{
+		variable: '$incident.ai_first_actions',
+		description:
+			'Human-approved first actions grounded in SOP steps or evidence.',
+	},
+	{
+		variable: '$incident.ai_confidence',
+		description: 'AI strategy confidence: high, medium, or low.',
+	},
+	{
+		variable: '$incident.ai_limitations',
+		description: 'Known limits such as missing evidence or provider timeout.',
+	},
+	{
+		variable: '$incident.ai_evidence_refs',
+		description: 'Evidence reference IDs cited by the AI strategy.',
+	},
 ];
 
 const INCIDENT_VARIABLE_PATTERN = /\$incident\.[A-Za-z0-9_.-]+/g;

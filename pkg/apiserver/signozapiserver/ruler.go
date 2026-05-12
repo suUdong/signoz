@@ -163,6 +163,106 @@ func (provider *provider) addRulerRoutes(router *mux.Router) error {
 		return err
 	}
 
+	if err := router.Handle("/api/v2/ds/sop/sources", handler.New(provider.authZ.ViewAccess(provider.rulerHandler.ListPilotSOPSources), handler.OpenAPIDef{
+		ID:                  "ListPilotSOPSources",
+		Tags:                []string{"rules"},
+		Summary:             "List SOP sources",
+		Description:         "This endpoint returns the catalog of registered SOP sources",
+		Response:            new(ruletypes.PilotSOPSourceCatalogResponse),
+		ResponseContentType: "application/json",
+		SuccessStatusCode:   http.StatusOK,
+		SecuritySchemes:     newSecuritySchemes(types.RoleViewer),
+	})).Methods(http.MethodGet).GetError(); err != nil {
+		return err
+	}
+
+	if err := router.Handle("/api/v2/ds/sop/sources/{id}/health", handler.New(provider.authZ.ViewAccess(provider.rulerHandler.GetPilotSOPSourceHealth), handler.OpenAPIDef{
+		ID:                  "GetPilotSOPSourceHealth",
+		Tags:                []string{"rules"},
+		Summary:             "Get SOP source health",
+		Description:         "This endpoint probes the health of a SOP source by ID",
+		Response:            new(ruletypes.PilotSOPSourceHealthResponse),
+		ResponseContentType: "application/json",
+		SuccessStatusCode:   http.StatusOK,
+		ErrorStatusCodes:    []int{http.StatusBadRequest, http.StatusNotFound},
+		SecuritySchemes:     newSecuritySchemes(types.RoleViewer),
+	})).Methods(http.MethodGet).GetError(); err != nil {
+		return err
+	}
+
+	if err := router.Handle("/api/v2/ds/sop/documents", handler.New(provider.authZ.EditAccess(provider.rulerHandler.CreateSOPDocument), handler.OpenAPIDef{
+		ID:                  "CreateSOPDocument",
+		Tags:                []string{"rules"},
+		Summary:             "Create a managed SOP document",
+		Description:         "This endpoint registers an approved ds.sop_document.v1 document for SigNoz-native DS-APM AI+SOP response strategy flows",
+		Request:             new(ruletypes.SOPDocument),
+		RequestContentType:  "application/json",
+		Response:            new(ruletypes.SOPDocument),
+		ResponseContentType: "application/json",
+		SuccessStatusCode:   http.StatusCreated,
+		ErrorStatusCodes:    []int{http.StatusBadRequest},
+		SecuritySchemes:     newSecuritySchemes(types.RoleEditor),
+	})).Methods(http.MethodPost).GetError(); err != nil {
+		return err
+	}
+
+	if err := router.Handle("/api/v2/ds/sop/documents", handler.New(provider.authZ.ViewAccess(provider.rulerHandler.ListSOPDocuments), handler.OpenAPIDef{
+		ID:                  "ListSOPDocuments",
+		Tags:                []string{"rules"},
+		Summary:             "List managed SOP documents",
+		Description:         "This endpoint lists registered SOP document summaries without returning markdown bodies",
+		Response:            new(ruletypes.SOPDocumentListResponse),
+		ResponseContentType: "application/json",
+		SuccessStatusCode:   http.StatusOK,
+		SecuritySchemes:     newSecuritySchemes(types.RoleViewer),
+	})).Methods(http.MethodGet).GetError(); err != nil {
+		return err
+	}
+
+	if err := router.Handle("/api/v2/ds/sop/documents/{sopId}", handler.New(provider.authZ.ViewAccess(provider.rulerHandler.GetSOPDocument), handler.OpenAPIDef{
+		ID:                  "GetSOPDocument",
+		Tags:                []string{"rules"},
+		Summary:             "Get latest SOP document",
+		Description:         "This endpoint returns the latest registered version of a SOP document by SOP ID",
+		Response:            new(ruletypes.SOPDocument),
+		ResponseContentType: "application/json",
+		SuccessStatusCode:   http.StatusOK,
+		ErrorStatusCodes:    []int{http.StatusBadRequest, http.StatusNotFound},
+		SecuritySchemes:     newSecuritySchemes(types.RoleViewer),
+	})).Methods(http.MethodGet).GetError(); err != nil {
+		return err
+	}
+
+	if err := router.Handle("/api/v2/ds/sop/documents/{sopId}/versions/{version}", handler.New(provider.authZ.ViewAccess(provider.rulerHandler.FetchSOPDocumentVersion), handler.OpenAPIDef{
+		ID:                  "FetchSOPDocumentVersion",
+		Tags:                []string{"rules"},
+		Summary:             "Fetch exact SOP document version",
+		Description:         "This endpoint returns an exact version of a registered SOP document for AI strategy generation and audit citation",
+		Response:            new(ruletypes.SOPDocument),
+		ResponseContentType: "application/json",
+		SuccessStatusCode:   http.StatusOK,
+		ErrorStatusCodes:    []int{http.StatusBadRequest, http.StatusNotFound},
+		SecuritySchemes:     newSecuritySchemes(types.RoleViewer),
+	})).Methods(http.MethodGet).GetError(); err != nil {
+		return err
+	}
+
+	if err := router.Handle("/api/v2/ds/sop/bindings/preview", handler.New(provider.authZ.ViewAccess(provider.rulerHandler.PreviewSOPDocumentBinding), handler.OpenAPIDef{
+		ID:                  "PreviewSOPDocumentBinding",
+		Tags:                []string{"rules"},
+		Summary:             "Preview SOP document binding",
+		Description:         "This endpoint resolves alert labels against registered SOP documents before AI strategy generation",
+		Request:             new(ruletypes.SOPBindingPreviewRequest),
+		RequestContentType:  "application/json",
+		Response:            new(ruletypes.SOPBindingPreviewResponse),
+		ResponseContentType: "application/json",
+		SuccessStatusCode:   http.StatusOK,
+		ErrorStatusCodes:    []int{http.StatusBadRequest},
+		SecuritySchemes:     newSecuritySchemes(types.RoleViewer),
+	})).Methods(http.MethodPost).GetError(); err != nil {
+		return err
+	}
+
 	if err := router.Handle("/api/v1/downtime_schedules", handler.New(provider.authZ.ViewAccess(provider.rulerHandler.ListDowntimeSchedules), handler.OpenAPIDef{
 		ID:                  "ListDowntimeSchedules",
 		Tags:                []string{"downtimeschedules"},

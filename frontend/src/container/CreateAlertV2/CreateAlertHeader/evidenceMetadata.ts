@@ -1,6 +1,13 @@
 import type { Labels } from 'types/api/alerts/def';
 
 export type EvidenceMetadataFieldKey =
+	| 'ai_confidence'
+	| 'ai_evidence_refs'
+	| 'ai_first_actions'
+	| 'ai_headline'
+	| 'ai_limitations'
+	| 'ai_strategy_id'
+	| 'ai_strategy_status'
 	| 'ai_summary'
 	| 'evidence_confidence'
 	| 'evidence_generated_at'
@@ -14,6 +21,41 @@ export type EvidenceMetadataField = {
 };
 
 export const EVIDENCE_METADATA_FIELDS: EvidenceMetadataField[] = [
+	{
+		key: 'ai_strategy_status',
+		label: 'AI strategy status',
+		placeholder: 'ready, unavailable, timeout, sop_missing',
+	},
+	{
+		key: 'ai_headline',
+		label: 'AI headline',
+		placeholder: 'SOP-grounded response strategy headline',
+	},
+	{
+		key: 'ai_first_actions',
+		label: 'AI first actions',
+		placeholder: 'Human-approved first actions grounded in SOP/evidence',
+	},
+	{
+		key: 'ai_confidence',
+		label: 'AI confidence',
+		placeholder: 'high, medium, low',
+	},
+	{
+		key: 'ai_limitations',
+		label: 'AI limitations',
+		placeholder: 'Missing evidence, provider timeout, low confidence',
+	},
+	{
+		key: 'ai_evidence_refs',
+		label: 'AI evidence refs',
+		placeholder: 'metric:error_rate:1, trace:error:1',
+	},
+	{
+		key: 'ai_strategy_id',
+		label: 'AI strategy ID',
+		placeholder: 'AIS-20260512-0001',
+	},
 	{
 		key: 'evidence_status',
 		label: 'Evidence status',
@@ -47,6 +89,16 @@ const EVIDENCE_STATUS_VALUES = new Set([
 	'ready',
 	'stale',
 	'summary_ready',
+	'unavailable',
+]);
+
+const AI_STRATEGY_STATUS_VALUES = new Set([
+	'blocked_by_policy',
+	'evidence_unavailable',
+	'low_confidence',
+	'ready',
+	'sop_missing',
+	'timeout',
 	'unavailable',
 ]);
 
@@ -105,7 +157,16 @@ export function validateEvidenceMetadataValue(
 	}
 
 	if (
-		key === 'evidence_confidence' &&
+		key === 'ai_strategy_status' &&
+		!AI_STRATEGY_STATUS_VALUES.has(trimmedValue.toLowerCase())
+	) {
+		warnings.push(
+			'Use one of: ready, unavailable, timeout, blocked_by_policy, sop_missing, evidence_unavailable, low_confidence.',
+		);
+	}
+
+	if (
+		(key === 'evidence_confidence' || key === 'ai_confidence') &&
 		!EVIDENCE_CONFIDENCE_VALUES.has(trimmedValue.toLowerCase())
 	) {
 		warnings.push('Use one of: high, medium, low.');

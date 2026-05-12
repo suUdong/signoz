@@ -290,6 +290,70 @@ describe('AlertResponseContext', () => {
 		).toBeInTheDocument();
 	});
 
+	it('renders SOP-grounded AI strategy metadata and copy actions', async () => {
+		const user = userEvent.setup();
+		render(
+			<AlertResponseContext
+				annotations={{
+					ai_confidence: 'medium',
+					ai_evidence_refs: 'metric:error_rate:1, trace:error:1',
+					ai_first_actions: 'SOP-PAY-001 1단계에 따라 PG timeout 로그를 확인',
+					ai_headline: 'SOP 기준 결제 지연 확인이 필요합니다.',
+					ai_limitations: '최근 배포 정보는 연결되지 않음',
+					ai_strategy_id: 'AIS-20260512-0001',
+					ai_strategy_status: 'ready',
+				}}
+				labels={{
+					sop_id: 'SOP-PAY-001',
+				}}
+			/>,
+		);
+
+		expect(screen.getByText('AI strategy')).toBeInTheDocument();
+		expect(screen.getByText('ready')).toBeInTheDocument();
+		expect(
+			screen.getByText('SOP 기준 결제 지연 확인이 필요합니다.'),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText('SOP-PAY-001 1단계에 따라 PG timeout 로그를 확인'),
+		).toBeInTheDocument();
+		expect(screen.getByText('medium')).toBeInTheDocument();
+		expect(
+			screen.getByText('metric:error_rate:1, trace:error:1'),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole('button', { name: /Copy AI strategy/ }),
+		).toBeInTheDocument();
+
+		await user.click(
+			screen.getByRole('button', { name: 'Copy AI first actions' }),
+		);
+		expect(mockCopyToClipboard).toHaveBeenLastCalledWith(
+			'SOP-PAY-001 1단계에 따라 PG timeout 로그를 확인',
+		);
+	});
+
+	it('renders AI fallback status without fabricated first actions', () => {
+		render(
+			<AlertResponseContext
+				annotations={{
+					ai_limitations: 'No evidence refs were available.',
+					ai_strategy_status: 'evidence_unavailable',
+				}}
+				labels={{
+					sop_id: 'SOP-PAY-001',
+				}}
+			/>,
+		);
+
+		expect(screen.getByText('AI strategy')).toBeInTheDocument();
+		expect(screen.getByText('evidence_unavailable')).toBeInTheDocument();
+		expect(
+			screen.getByText('No evidence refs were available.'),
+		).toBeInTheDocument();
+		expect(screen.queryByText('First actions')).not.toBeInTheDocument();
+	});
+
 	it('copies SOP status section and individual SOP URL', async () => {
 		const user = userEvent.setup();
 		render(

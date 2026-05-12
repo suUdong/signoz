@@ -1,0 +1,58 @@
+{
+  "sopDocument": {
+    "contractVersion": "ds.sop_document.v1",
+    "sopId": "SOP-PAY-001",
+    "title": "Payment API 5xx response",
+    "version": "2026-05-12.1",
+    "checksum": "sha256:8ff64bc56c2859e8446ec55b113a97684ed7bd484e088c5a5bcf846996cf5dfe",
+    "source": {
+      "type": "managed_markdown",
+      "sourceId": "src-managed-markdown-default"
+    },
+    "bodyMarkdown": "# Payment API 5xx response\n\n1. 결제 성공률 dashboard와 PG timeout log를 확인\n2. 결제 승인 큐 적체 여부를 확인\n3. 외부 PG 공지와 장애 상태를 확인",
+    "displayUrl": "https://kb.example/sop/SOP-PAY-001",
+    "ownerTeam": "payments",
+    "approvalStatus": "approved",
+    "tags": ["payment-api", "prod", "critical"],
+    "updatedAt": "2026-05-12T00:00:00Z",
+    "securityContext": {
+      "serviceAccountProfile": "ds-sop-reader",
+      "secretRefVisible": false,
+      "browserCredentialsUsed": false,
+      "redactionApplied": true
+    }
+  },
+  "alert": {
+    "incidentId": "INC-20260512-0001",
+    "fingerprint": "fp-payment-api-5xx-demo",
+    "labels": {
+      "alertname": "PaymentAPI5xxHigh",
+      "project_id": "customer-a",
+      "environment": "prod",
+      "service.name": "payment-api",
+      "owner_team": "payments",
+      "severity": "critical",
+      "sop_id": "SOP-PAY-001"
+    },
+    "annotations": {
+      "impact_summary": "Payment API 5xx increase can affect checkout success.",
+      "next_action": "Follow the bound SOP and inspect PG timeout evidence."
+    }
+  },
+  "evidenceRefs": [
+    {
+      "refId": "metric:error_rate:payment-api",
+      "type": "metric",
+      "observation": "5xx rate rose from 0.2% to 12%",
+      "permalink": "https://signoz.example/dashboard/payment-api",
+      "confidence": "high"
+    },
+    {
+      "refId": "trace:pg-timeout:sample",
+      "type": "trace",
+      "observation": "PG timeout spans increased on payment confirmation",
+      "permalink": "https://signoz.example/traces/pg-timeout-sample",
+      "confidence": "medium"
+    }
+  ]
+}

@@ -43,6 +43,14 @@ describe('evidenceMetadata', () => {
 		expect(
 			validateEvidenceMetadataValue('evidence_url', 'javascript:alert(1)'),
 		).toStrictEqual(['Use an http:// or https:// evidence URL.']);
+		expect(
+			validateEvidenceMetadataValue('ai_strategy_status', 'fabricated'),
+		).toStrictEqual([
+			'Use one of: ready, unavailable, timeout, blocked_by_policy, sop_missing, evidence_unavailable, low_confidence.',
+		]);
+		expect(
+			validateEvidenceMetadataValue('ai_confidence', 'certain'),
+		).toStrictEqual(['Use one of: high, medium, low.']);
 	});
 
 	it('warns when evidence metadata looks like a secret', () => {
@@ -56,11 +64,14 @@ describe('evidenceMetadata', () => {
 	it('returns warnings keyed by evidence annotation', () => {
 		expect(
 			validateEvidenceMetadata({
+				ai_confidence: 'certain',
+				ai_strategy_status: 'ready',
 				evidence_confidence: 'unknown',
 				evidence_status: 'ready',
 				evidence_url: 'ftp://evidence.example.com/report',
 			}),
 		).toStrictEqual({
+			ai_confidence: ['Use one of: high, medium, low.'],
 			evidence_confidence: ['Use one of: high, medium, low.'],
 			evidence_url: ['Use an http:// or https:// evidence URL.'],
 		});

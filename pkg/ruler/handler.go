@@ -13,6 +13,13 @@ type Handler interface {
 	PreviewNotificationTemplate(http.ResponseWriter, *http.Request)
 	PreviewSOP(http.ResponseWriter, *http.Request)
 	FetchPilotManagedMarkdownSOP(http.ResponseWriter, *http.Request)
+	ListPilotSOPSources(http.ResponseWriter, *http.Request)
+	GetPilotSOPSourceHealth(http.ResponseWriter, *http.Request)
+	CreateSOPDocument(http.ResponseWriter, *http.Request)
+	ListSOPDocuments(http.ResponseWriter, *http.Request)
+	GetSOPDocument(http.ResponseWriter, *http.Request)
+	FetchSOPDocumentVersion(http.ResponseWriter, *http.Request)
+	PreviewSOPDocumentBinding(http.ResponseWriter, *http.Request)
 
 	ListDowntimeSchedules(http.ResponseWriter, *http.Request)
 	GetDowntimeScheduleByID(http.ResponseWriter, *http.Request)

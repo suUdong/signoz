@@ -18,6 +18,7 @@ import {
 	roleDetails,
 	rolesSettings,
 	serviceAccountsSettings,
+	sopDocumentsSettings,
 } from './config';
 
 export const getRoutes = (
@@ -61,6 +62,7 @@ export const getRoutes = (
 	}
 
 	settings.push(...alertChannels(t));
+	settings.push(...sopDocumentsSettings(t));
 
 	if (isAdmin) {
 		settings.push(

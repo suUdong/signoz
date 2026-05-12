@@ -2,8 +2,13 @@ package signozruler
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
+	"sort"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/SigNoz/signoz/pkg/errors"
@@ -14,10 +19,14 @@ import (
 	"github.com/SigNoz/signoz/pkg/types/ruletypes"
 	"github.com/SigNoz/signoz/pkg/valuer"
 	"github.com/gorilla/mux"
+	"go.uber.org/zap"
 )
 
 type handler struct {
-	ruler ruler.Ruler
+	ruler                   ruler.Ruler
+	managedMarkdownDisabled atomic.Bool
+	sopDocumentsMu          sync.RWMutex
+	sopDocuments            map[string]ruletypes.SOPDocument
 }
 
 func NewHandler(ruler ruler.Ruler) ruler.Handler {
@@ -215,7 +224,28 @@ func (handler *handler) PreviewSOP(rw http.ResponseWriter, req *http.Request) {
 	render.Success(rw, http.StatusOK, ruletypes.PreviewSOP(previewReq))
 }
 
+// SetManagedMarkdownDisabled toggles the in-process managed_markdown rollback flag.
+//
+// This handler-level toggle is intentionally separate from
+// ruletypes.PilotConfiguration.Enabled (the contract-level config field) for
+// PoC scope: wiring the handler to read PilotConfiguration at request time
+// requires a config-provider scaffold that will land in Phase 4 cockpit work.
+// For now, operators flip this flag via a future admin endpoint or directly
+// in tests; the contract-level field remains the canonical schema and will
+// unify the toggle path once the cockpit ships.
+func (handler *handler) SetManagedMarkdownDisabled(v bool) {
+	handler.managedMarkdownDisabled.Store(v)
+}
+
 func (handler *handler) FetchPilotManagedMarkdownSOP(rw http.ResponseWriter, req *http.Request) {
+	if handler.managedMarkdownDisabled.Load() {
+		zap.L().Info("managed markdown SOP fetch rejected — administratively disabled",
+			zap.String("path", req.URL.Path),
+			zap.String("remote", req.RemoteAddr))
+		http.Error(rw, "managed markdown SOP fetch is administratively disabled", http.StatusServiceUnavailable)
+		return
+	}
+
 	var fetchReq ruletypes.PilotManagedMarkdownSOPFetchRequest
 	if err := binding.JSON.BindBody(req.Body, &fetchReq); err != nil {
 		render.Error(rw, err)
@@ -368,4 +398,190 @@ func (handler *handler) DeleteDowntimeScheduleByID(rw http.ResponseWriter, req *
 	}
 
 	render.Success(rw, http.StatusNoContent, nil)
+}
+
+const pilotManagedMarkdownDefaultSourceID = "src-managed-markdown-default"
+
+// pilotManagedMarkdownDefaultSource returns the canonical live managed_markdown
+// catalog entry that matches what FetchPilotManagedMarkdownSOP serves. The
+// constructor returns a fresh struct on every call so handlers cannot share
+// mutable package-level state.
+func pilotManagedMarkdownDefaultSource() ruletypes.PilotManagedMarkdownSource {
+	return ruletypes.PilotManagedMarkdownSource{
+		SourceID:              pilotManagedMarkdownDefaultSourceID,
+		DisplayName:           "Managed Markdown SOP Registry",
+		Status:                ruletypes.PilotSOPSourceStatusHealthy,
+		ServiceAccountProfile: "ds-sop-reader",
+	}
+}
+
+func (handler *handler) ListPilotSOPSources(rw http.ResponseWriter, req *http.Request) {
+	resp, err := ruletypes.NewPilotManagedMarkdownCatalog([]ruletypes.PilotManagedMarkdownSource{
+		pilotManagedMarkdownDefaultSource(),
+	})
+	if err != nil {
+		zap.L().Error("pilot sop source catalog validation failed", zap.Error(err))
+		http.Error(rw, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	rw.Header().Set("Content-Type", "application/json")
+	rw.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(rw).Encode(resp); err != nil {
+		zap.L().Warn("pilot sop source catalog encode failed", zap.Error(err))
+	}
+}
+
+func (handler *handler) GetPilotSOPSourceHealth(rw http.ResponseWriter, req *http.Request) {
+	id := strings.TrimSpace(mux.Vars(req)["id"])
+	if id == "" {
+		http.Error(rw, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	if id != pilotManagedMarkdownDefaultSourceID {
+		rw.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	checkedAt := time.Now().UTC().Format(time.RFC3339)
+	resp, err := ruletypes.NewPilotManagedMarkdownHealth(pilotManagedMarkdownDefaultSource(), checkedAt)
+	if err != nil {
+		zap.L().Error("pilot sop source health validation failed", zap.String("sourceId", id), zap.Error(err))
+		http.Error(rw, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	rw.Header().Set("Content-Type", "application/json")
+	rw.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(rw).Encode(resp); err != nil {
+		zap.L().Warn("pilot sop source health encode failed", zap.String("sourceId", id), zap.Error(err))
+	}
+}
+
+func (handler *handler) CreateSOPDocument(rw http.ResponseWriter, req *http.Request) {
+	var doc ruletypes.SOPDocument
+	if err := binding.JSON.BindBody(req.Body, &doc); err != nil {
+		render.Error(rw, err)
+		return
+	}
+	defer req.Body.Close() //nolint:errcheck
+
+	if err := ruletypes.ValidateSOPDocument(doc); err != nil {
+		render.Error(rw, errors.WrapInvalidInputf(err, errors.CodeInvalidInput, "SOP document validation failed"))
+		return
+	}
+
+	handler.storeSOPDocument(doc)
+	render.Success(rw, http.StatusCreated, doc)
+}
+
+func (handler *handler) ListSOPDocuments(rw http.ResponseWriter, req *http.Request) {
+	render.Success(rw, http.StatusOK, ruletypes.NewSOPDocumentListResponse(handler.snapshotSOPDocuments()))
+}
+
+func (handler *handler) GetSOPDocument(rw http.ResponseWriter, req *http.Request) {
+	sopID := strings.TrimSpace(mux.Vars(req)["sopId"])
+	if sopID == "" {
+		http.Error(rw, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	doc, ok := handler.latestSOPDocument(sopID)
+	if !ok {
+		rw.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	render.Success(rw, http.StatusOK, doc)
+}
+
+func (handler *handler) FetchSOPDocumentVersion(rw http.ResponseWriter, req *http.Request) {
+	vars := mux.Vars(req)
+	sopID := strings.TrimSpace(vars["sopId"])
+	version := strings.TrimSpace(vars["version"])
+	if sopID == "" || version == "" {
+		http.Error(rw, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	doc, ok := handler.sopDocument(sopID, version)
+	if !ok {
+		rw.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	render.Success(rw, http.StatusOK, doc)
+}
+
+func (handler *handler) PreviewSOPDocumentBinding(rw http.ResponseWriter, req *http.Request) {
+	var previewReq ruletypes.SOPBindingPreviewRequest
+	if err := binding.JSON.BindBody(req.Body, &previewReq); err != nil {
+		render.Error(rw, err)
+		return
+	}
+	defer req.Body.Close() //nolint:errcheck
+
+	resp, err := ruletypes.PreviewSOPDocumentBinding(handler.snapshotSOPDocuments(), previewReq)
+	if err != nil {
+		render.Error(rw, errors.WrapInvalidInputf(err, errors.CodeInvalidInput, "SOP binding preview validation failed"))
+		return
+	}
+
+	render.Success(rw, http.StatusOK, resp)
+}
+
+func (handler *handler) storeSOPDocument(doc ruletypes.SOPDocument) {
+	handler.sopDocumentsMu.Lock()
+	defer handler.sopDocumentsMu.Unlock()
+
+	if handler.sopDocuments == nil {
+		handler.sopDocuments = map[string]ruletypes.SOPDocument{}
+	}
+	handler.sopDocuments[sopDocumentKey(doc.SOPID, doc.Version)] = doc
+}
+
+func (handler *handler) snapshotSOPDocuments() []ruletypes.SOPDocument {
+	handler.sopDocumentsMu.RLock()
+	defer handler.sopDocumentsMu.RUnlock()
+
+	docs := make([]ruletypes.SOPDocument, 0, len(handler.sopDocuments))
+	for _, doc := range handler.sopDocuments {
+		docs = append(docs, doc)
+	}
+	sort.Slice(docs, func(i, j int) bool {
+		if docs[i].SOPID == docs[j].SOPID {
+			return docs[i].Version < docs[j].Version
+		}
+		return docs[i].SOPID < docs[j].SOPID
+	})
+
+	return docs
+}
+
+func (handler *handler) latestSOPDocument(sopID string) (ruletypes.SOPDocument, bool) {
+	var latest ruletypes.SOPDocument
+	found := false
+	for _, doc := range handler.snapshotSOPDocuments() {
+		if doc.SOPID != sopID {
+			continue
+		}
+		if !found || doc.Version > latest.Version {
+			latest = doc
+			found = true
+		}
+	}
+	return latest, found
+}
+
+func (handler *handler) sopDocument(sopID string, version string) (ruletypes.SOPDocument, bool) {
+	handler.sopDocumentsMu.RLock()
+	defer handler.sopDocumentsMu.RUnlock()
+
+	doc, ok := handler.sopDocuments[sopDocumentKey(sopID, version)]
+	return doc, ok
+}
+
+func sopDocumentKey(sopID string, version string) string {
+	return strings.TrimSpace(sopID) + "\x00" + strings.TrimSpace(version)
 }

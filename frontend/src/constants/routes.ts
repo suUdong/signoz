@@ -32,6 +32,7 @@ const ROUTES = {
 	ALL_CHANNELS: '/settings/channels',
 	CHANNELS_NEW: '/settings/channels/new',
 	CHANNELS_EDIT: '/settings/channels/edit/:channelId',
+	SOP_DOCUMENTS_SETTINGS: '/settings/sop-documents',
 	ALL_ERROR: '/exceptions',
 	ERROR_DETAIL: '/error-detail',
 	VERSION: '/status',
