@@ -27,12 +27,30 @@ type handler struct {
 	managedMarkdownDisabled atomic.Bool
 	sopDocumentsMu          sync.RWMutex
 	sopDocuments            map[string]ruletypes.SOPDocument
+	sopDocumentStorePath    string
+	sopDocumentStoreErr     error
 	aiStrategyHistoryMu     sync.RWMutex
 	aiStrategyHistory       map[string]ruletypes.AIStrategyHistoryRecord
 }
 
 func NewHandler(ruler ruler.Ruler) ruler.Handler {
-	return &handler{ruler: ruler}
+	return newHandlerWithSOPDocumentStorePath(ruler, defaultSOPDocumentFileStorePath())
+}
+
+func newHandlerWithSOPDocumentStorePath(ruler ruler.Ruler, storePath string) *handler {
+	handler := &handler{
+		ruler:                ruler,
+		sopDocumentStorePath: strings.TrimSpace(storePath),
+	}
+	if err := handler.loadSOPDocumentsFromStore(); err != nil {
+		handler.sopDocumentStoreErr = err
+		zap.L().Warn("SOP document file store load failed",
+			zap.String("path", handler.sopDocumentStorePath),
+			zap.Error(err),
+		)
+	}
+
+	return handler
 }
 
 func (handler *handler) ListRules(rw http.ResponseWriter, req *http.Request) {
@@ -475,6 +493,10 @@ func (handler *handler) CreateSOPDocument(rw http.ResponseWriter, req *http.Requ
 		render.Error(rw, err)
 		return
 	}
+	if err := handler.ensureSOPDocumentStoreReady(); err != nil {
+		render.Error(rw, err)
+		return
+	}
 
 	var doc ruletypes.SOPDocument
 	if err := binding.JSON.BindBody(req.Body, &doc); err != nil {
@@ -488,12 +510,19 @@ func (handler *handler) CreateSOPDocument(rw http.ResponseWriter, req *http.Requ
 		return
 	}
 
-	handler.storeSOPDocument(doc)
+	if err := handler.storeSOPDocument(doc); err != nil {
+		render.Error(rw, errors.WrapInternalf(err, errors.CodeInternal, "persist SOP document"))
+		return
+	}
 	render.Success(rw, http.StatusCreated, doc)
 }
 
 func (handler *handler) ListSOPDocuments(rw http.ResponseWriter, req *http.Request) {
 	if _, err := authtypes.ClaimsFromContext(req.Context()); err != nil {
+		render.Error(rw, err)
+		return
+	}
+	if err := handler.ensureSOPDocumentStoreReady(); err != nil {
 		render.Error(rw, err)
 		return
 	}
@@ -503,6 +532,10 @@ func (handler *handler) ListSOPDocuments(rw http.ResponseWriter, req *http.Reque
 
 func (handler *handler) GetSOPDocument(rw http.ResponseWriter, req *http.Request) {
 	if _, err := authtypes.ClaimsFromContext(req.Context()); err != nil {
+		render.Error(rw, err)
+		return
+	}
+	if err := handler.ensureSOPDocumentStoreReady(); err != nil {
 		render.Error(rw, err)
 		return
 	}
@@ -527,6 +560,10 @@ func (handler *handler) FetchSOPDocumentVersion(rw http.ResponseWriter, req *htt
 		render.Error(rw, err)
 		return
 	}
+	if err := handler.ensureSOPDocumentStoreReady(); err != nil {
+		render.Error(rw, err)
+		return
+	}
 
 	vars := mux.Vars(req)
 	sopID := strings.TrimSpace(vars["sopId"])
@@ -547,6 +584,10 @@ func (handler *handler) FetchSOPDocumentVersion(rw http.ResponseWriter, req *htt
 
 func (handler *handler) PreviewSOPDocumentBinding(rw http.ResponseWriter, req *http.Request) {
 	if _, err := authtypes.ClaimsFromContext(req.Context()); err != nil {
+		render.Error(rw, err)
+		return
+	}
+	if err := handler.ensureSOPDocumentStoreReady(); err != nil {
 		render.Error(rw, err)
 		return
 	}
@@ -621,14 +662,49 @@ func (handler *handler) GetLatestAIStrategyHistory(rw http.ResponseWriter, req *
 	render.Success(rw, http.StatusOK, record)
 }
 
-func (handler *handler) storeSOPDocument(doc ruletypes.SOPDocument) {
+func (handler *handler) ensureSOPDocumentStoreReady() error {
+	if handler.sopDocumentStoreErr == nil {
+		return nil
+	}
+
+	return errors.WrapInternalf(handler.sopDocumentStoreErr, errors.CodeInternal, "SOP document store unavailable")
+}
+
+func (handler *handler) loadSOPDocumentsFromStore() error {
+	if strings.TrimSpace(handler.sopDocumentStorePath) == "" {
+		return nil
+	}
+
+	docs, err := loadSOPDocumentFileStore(handler.sopDocumentStorePath)
+	if err != nil {
+		return err
+	}
+
+	handler.sopDocumentsMu.Lock()
+	defer handler.sopDocumentsMu.Unlock()
+	handler.sopDocuments = docs
+
+	return nil
+}
+
+func (handler *handler) storeSOPDocument(doc ruletypes.SOPDocument) error {
 	handler.sopDocumentsMu.Lock()
 	defer handler.sopDocumentsMu.Unlock()
 
-	if handler.sopDocuments == nil {
-		handler.sopDocuments = map[string]ruletypes.SOPDocument{}
+	next := make(map[string]ruletypes.SOPDocument, len(handler.sopDocuments)+1)
+	for key, existing := range handler.sopDocuments {
+		next[key] = existing
 	}
-	handler.sopDocuments[sopDocumentKey(doc.SOPID, doc.Version)] = doc
+	next[sopDocumentKey(doc.SOPID, doc.Version)] = doc
+
+	if strings.TrimSpace(handler.sopDocumentStorePath) != "" {
+		if err := saveSOPDocumentFileStore(handler.sopDocumentStorePath, sortedSOPDocumentsFromMap(next)); err != nil {
+			return err
+		}
+	}
+
+	handler.sopDocuments = next
+	return nil
 }
 
 func (handler *handler) snapshotSOPDocuments() []ruletypes.SOPDocument {

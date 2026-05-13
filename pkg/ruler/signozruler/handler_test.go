@@ -7,6 +7,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 
@@ -303,6 +305,61 @@ func TestSOPDocumentHandlersCreateListGetFetchAndBind(t *testing.T) {
 	require.Equal(t, ruletypes.SOPBindingStatusBound, binding.Data.Status)
 	require.Equal(t, ruletypes.SOPBindingResolutionExplicitLabel, binding.Data.Resolution)
 	require.Equal(t, "SOP-PAY-001", binding.Data.SOPID)
+}
+
+func TestSOPDocumentHandlersPersistDocumentsToFileStore(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "ds-apm", "sop-documents.json")
+	h := newHandlerWithSOPDocumentStorePath(nil, storePath)
+	body := validSOPDocumentRequestBody(t, "2026-05-12.1", ruletypes.SOPApprovalStatusApproved)
+
+	createRW := httptest.NewRecorder()
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v2/ds/sop/documents", bytes.NewReader(body))
+	createReq = withSOPTestClaims(createReq)
+	h.CreateSOPDocument(createRW, createReq)
+
+	require.Equal(t, http.StatusCreated, createRW.Code)
+	require.FileExists(t, storePath)
+
+	restored := newHandlerWithSOPDocumentStorePath(nil, storePath)
+	listRW := httptest.NewRecorder()
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v2/ds/sop/documents", nil)
+	listReq = withSOPTestClaims(listReq)
+	restored.ListSOPDocuments(listRW, listReq)
+
+	require.Equal(t, http.StatusOK, listRW.Code)
+	var listed struct {
+		Data ruletypes.SOPDocumentListResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(listRW.Body.Bytes(), &listed))
+	require.Len(t, listed.Data.Documents, 1)
+	require.Equal(t, "SOP-PAY-001", listed.Data.Documents[0].SOPID)
+	require.Equal(t, "2026-05-12.1", listed.Data.Documents[0].Version)
+
+	getRW := httptest.NewRecorder()
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v2/ds/sop/documents/SOP-PAY-001", nil)
+	getReq = withSOPTestClaims(getReq)
+	getReq = muxSetVar(getReq, "sopId", "SOP-PAY-001")
+	restored.GetSOPDocument(getRW, getReq)
+
+	require.Equal(t, http.StatusOK, getRW.Code)
+	var got struct {
+		Data ruletypes.SOPDocument `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(getRW.Body.Bytes(), &got))
+	require.Contains(t, got.Data.BodyMarkdown, "Restart payment-api")
+}
+
+func TestSOPDocumentHandlersBlockWhenFileStoreCannotLoad(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "sop-documents.json")
+	require.NoError(t, os.WriteFile(storePath, []byte(`{"contractVersion":"bad","documents":[]}`), 0o600))
+	h := newHandlerWithSOPDocumentStorePath(nil, storePath)
+
+	listRW := httptest.NewRecorder()
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v2/ds/sop/documents", nil)
+	listReq = withSOPTestClaims(listReq)
+	h.ListSOPDocuments(listRW, listReq)
+
+	require.Equal(t, http.StatusInternalServerError, listRW.Code)
 }
 
 func TestSOPDocumentHandlersRejectUnsafeCreateAndReportMissing(t *testing.T) {
