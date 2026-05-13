@@ -417,6 +417,10 @@ func pilotManagedMarkdownDefaultSource() ruletypes.PilotManagedMarkdownSource {
 		DisplayName:           "Managed Markdown SOP Registry",
 		Status:                ruletypes.PilotSOPSourceStatusHealthy,
 		ServiceAccountProfile: "ds-sop-reader",
+		TenantScope: ruletypes.PilotTenantScope{
+			ProjectIDs:   []string{"customer-a"},
+			Environments: []string{"prod"},
+		},
 	}
 }
 
@@ -465,6 +469,11 @@ func (handler *handler) GetPilotSOPSourceHealth(rw http.ResponseWriter, req *htt
 }
 
 func (handler *handler) CreateSOPDocument(rw http.ResponseWriter, req *http.Request) {
+	if _, err := authtypes.ClaimsFromContext(req.Context()); err != nil {
+		render.Error(rw, err)
+		return
+	}
+
 	var doc ruletypes.SOPDocument
 	if err := binding.JSON.BindBody(req.Body, &doc); err != nil {
 		render.Error(rw, err)
@@ -482,10 +491,20 @@ func (handler *handler) CreateSOPDocument(rw http.ResponseWriter, req *http.Requ
 }
 
 func (handler *handler) ListSOPDocuments(rw http.ResponseWriter, req *http.Request) {
+	if _, err := authtypes.ClaimsFromContext(req.Context()); err != nil {
+		render.Error(rw, err)
+		return
+	}
+
 	render.Success(rw, http.StatusOK, ruletypes.NewSOPDocumentListResponse(handler.snapshotSOPDocuments()))
 }
 
 func (handler *handler) GetSOPDocument(rw http.ResponseWriter, req *http.Request) {
+	if _, err := authtypes.ClaimsFromContext(req.Context()); err != nil {
+		render.Error(rw, err)
+		return
+	}
+
 	sopID := strings.TrimSpace(mux.Vars(req)["sopId"])
 	if sopID == "" {
 		http.Error(rw, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -502,6 +521,11 @@ func (handler *handler) GetSOPDocument(rw http.ResponseWriter, req *http.Request
 }
 
 func (handler *handler) FetchSOPDocumentVersion(rw http.ResponseWriter, req *http.Request) {
+	if _, err := authtypes.ClaimsFromContext(req.Context()); err != nil {
+		render.Error(rw, err)
+		return
+	}
+
 	vars := mux.Vars(req)
 	sopID := strings.TrimSpace(vars["sopId"])
 	version := strings.TrimSpace(vars["version"])
@@ -520,6 +544,11 @@ func (handler *handler) FetchSOPDocumentVersion(rw http.ResponseWriter, req *htt
 }
 
 func (handler *handler) PreviewSOPDocumentBinding(rw http.ResponseWriter, req *http.Request) {
+	if _, err := authtypes.ClaimsFromContext(req.Context()); err != nil {
+		render.Error(rw, err)
+		return
+	}
+
 	var previewReq ruletypes.SOPBindingPreviewRequest
 	if err := binding.JSON.BindBody(req.Body, &previewReq); err != nil {
 		render.Error(rw, err)
@@ -532,8 +561,34 @@ func (handler *handler) PreviewSOPDocumentBinding(rw http.ResponseWriter, req *h
 		render.Error(rw, errors.WrapInvalidInputf(err, errors.CodeInvalidInput, "SOP binding preview validation failed"))
 		return
 	}
+	if resp.Status == ruletypes.SOPBindingStatusForbidden {
+		render.Error(rw, errors.New(errors.TypeForbidden, errors.CodeForbidden, ruletypes.SOPTenantPolicyDeniedWarning))
+		return
+	}
 
 	render.Success(rw, http.StatusOK, resp)
+}
+
+func (handler *handler) PreviewAIStrategy(rw http.ResponseWriter, req *http.Request) {
+	if _, err := authtypes.ClaimsFromContext(req.Context()); err != nil {
+		render.Error(rw, err)
+		return
+	}
+
+	var strategyReq ruletypes.AIStrategyRequest
+	if err := binding.JSON.BindBody(req.Body, &strategyReq); err != nil {
+		render.Error(rw, err)
+		return
+	}
+	defer req.Body.Close() //nolint:errcheck
+
+	strategy, err := ruletypes.GenerateLocalAIStrategy(strategyReq)
+	if err != nil {
+		render.Error(rw, errors.WrapInvalidInputf(err, errors.CodeInvalidInput, "AI strategy preview validation failed"))
+		return
+	}
+
+	render.Success(rw, http.StatusOK, strategy)
 }
 
 func (handler *handler) storeSOPDocument(doc ruletypes.SOPDocument) {

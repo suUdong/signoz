@@ -13,6 +13,10 @@
     "displayUrl": "https://kb.example/sop/SOP-PAY-001",
     "ownerTeam": "payments",
     "approvalStatus": "approved",
+    "tenantScope": {
+      "projectIds": ["customer-a"],
+      "environments": ["prod"]
+    },
     "tags": ["payment-api", "prod", "critical"],
     "updatedAt": "2026-05-12T00:00:00Z",
     "securityContext": {

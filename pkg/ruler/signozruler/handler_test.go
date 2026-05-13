@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/SigNoz/signoz/pkg/types/authtypes"
 	"github.com/SigNoz/signoz/pkg/types/ruletypes"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/require"
@@ -49,6 +50,10 @@ func validPilotManagedMarkdownSOPFetchRequestBody(t *testing.T) []byte {
 			LastHealthCheckAt:     "2026-04-30T00:00:00Z",
 			LastSyncAt:            "2026-04-30T00:00:00Z",
 			ServiceAccountProfile: "ds-sop-reader",
+			TenantScope: ruletypes.PilotTenantScope{
+				ProjectIDs:   []string{"customer-a"},
+				Environments: []string{"prod"},
+			},
 			Documents: []ruletypes.PilotManagedMarkdownDocument{
 				{
 					SOPID:        "SOP-PAY-001",
@@ -221,6 +226,7 @@ func TestSOPDocumentHandlersCreateListGetFetchAndBind(t *testing.T) {
 
 	createRW := httptest.NewRecorder()
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v2/ds/sop/documents", bytes.NewReader(body))
+	createReq = withSOPTestClaims(createReq)
 	h.CreateSOPDocument(createRW, createReq)
 
 	require.Equal(t, http.StatusCreated, createRW.Code)
@@ -235,6 +241,7 @@ func TestSOPDocumentHandlersCreateListGetFetchAndBind(t *testing.T) {
 
 	listRW := httptest.NewRecorder()
 	listReq := httptest.NewRequest(http.MethodGet, "/api/v2/ds/sop/documents", nil)
+	listReq = withSOPTestClaims(listReq)
 	h.ListSOPDocuments(listRW, listReq)
 
 	require.Equal(t, http.StatusOK, listRW.Code)
@@ -249,6 +256,7 @@ func TestSOPDocumentHandlersCreateListGetFetchAndBind(t *testing.T) {
 
 	getRW := httptest.NewRecorder()
 	getReq := httptest.NewRequest(http.MethodGet, "/api/v2/ds/sop/documents/SOP-PAY-001", nil)
+	getReq = withSOPTestClaims(getReq)
 	getReq = muxSetVar(getReq, "sopId", "SOP-PAY-001")
 	h.GetSOPDocument(getRW, getReq)
 
@@ -262,6 +270,7 @@ func TestSOPDocumentHandlersCreateListGetFetchAndBind(t *testing.T) {
 
 	fetchRW := httptest.NewRecorder()
 	fetchReq := httptest.NewRequest(http.MethodGet, "/api/v2/ds/sop/documents/SOP-PAY-001/versions/2026-05-12.1", nil)
+	fetchReq = withSOPTestClaims(fetchReq)
 	fetchReq = muxSetVar(fetchReq, "sopId", "SOP-PAY-001")
 	fetchReq = muxSetVar(fetchReq, "version", "2026-05-12.1")
 	h.FetchSOPDocumentVersion(fetchRW, fetchReq)
@@ -274,11 +283,16 @@ func TestSOPDocumentHandlersCreateListGetFetchAndBind(t *testing.T) {
 	require.Equal(t, "2026-05-12.1", fetched.Data.Version)
 
 	bindingBody, err := json.Marshal(ruletypes.SOPBindingPreviewRequest{
-		Labels: map[string]string{"sop_id": "SOP-PAY-001"},
+		Labels: map[string]string{
+			"environment": "prod",
+			"project_id":  "customer-a",
+			"sop_id":      "SOP-PAY-001",
+		},
 	})
 	require.NoError(t, err)
 	bindRW := httptest.NewRecorder()
 	bindReq := httptest.NewRequest(http.MethodPost, "/api/v2/ds/sop/bindings/preview", bytes.NewReader(bindingBody))
+	bindReq = withSOPTestClaims(bindReq)
 	h.PreviewSOPDocumentBinding(bindRW, bindReq)
 
 	require.Equal(t, http.StatusOK, bindRW.Code)
@@ -300,11 +314,13 @@ func TestSOPDocumentHandlersRejectUnsafeCreateAndReportMissing(t *testing.T) {
 
 	createRW := httptest.NewRecorder()
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v2/ds/sop/documents", bytes.NewReader(body))
+	createReq = withSOPTestClaims(createReq)
 	h.CreateSOPDocument(createRW, createReq)
 	require.Equal(t, http.StatusBadRequest, createRW.Code)
 
 	missingRW := httptest.NewRecorder()
 	missingReq := httptest.NewRequest(http.MethodGet, "/api/v2/ds/sop/documents/SOP-UNKNOWN", nil)
+	missingReq = withSOPTestClaims(missingReq)
 	missingReq = muxSetVar(missingReq, "sopId", "SOP-UNKNOWN")
 	h.GetSOPDocument(missingRW, missingReq)
 	require.Equal(t, http.StatusNotFound, missingRW.Code)
@@ -315,15 +331,21 @@ func TestPreviewSOPDocumentBindingHandlerReportsDisabled(t *testing.T) {
 	body := validSOPDocumentRequestBody(t, "2026-05-12.1", ruletypes.SOPApprovalStatusDisabled)
 	createRW := httptest.NewRecorder()
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v2/ds/sop/documents", bytes.NewReader(body))
+	createReq = withSOPTestClaims(createReq)
 	h.CreateSOPDocument(createRW, createReq)
 	require.Equal(t, http.StatusCreated, createRW.Code)
 
 	bindingBody, err := json.Marshal(ruletypes.SOPBindingPreviewRequest{
-		Labels: map[string]string{"sop_id": "SOP-PAY-001"},
+		Labels: map[string]string{
+			"environment": "prod",
+			"project_id":  "customer-a",
+			"sop_id":      "SOP-PAY-001",
+		},
 	})
 	require.NoError(t, err)
 	bindRW := httptest.NewRecorder()
 	bindReq := httptest.NewRequest(http.MethodPost, "/api/v2/ds/sop/bindings/preview", bytes.NewReader(bindingBody))
+	bindReq = withSOPTestClaims(bindReq)
 	h.PreviewSOPDocumentBinding(bindRW, bindReq)
 
 	require.Equal(t, http.StatusOK, bindRW.Code)
@@ -333,6 +355,95 @@ func TestPreviewSOPDocumentBindingHandlerReportsDisabled(t *testing.T) {
 	require.NoError(t, json.Unmarshal(bindRW.Body.Bytes(), &binding))
 	require.Equal(t, ruletypes.SOPBindingStatusDisabled, binding.Data.Status)
 	require.Contains(t, binding.Data.Warnings, "sop document is disabled")
+}
+
+func TestSOPDocumentHandlersRequireClaims(t *testing.T) {
+	body := validSOPDocumentRequestBody(t, "2026-05-12.1", ruletypes.SOPApprovalStatusApproved)
+	rw := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/ds/sop/documents", bytes.NewReader(body))
+
+	(&handler{}).CreateSOPDocument(rw, req)
+
+	require.Equal(t, http.StatusUnauthorized, rw.Code)
+}
+
+func TestPreviewSOPDocumentBindingHandlerRejectsCrossTenantScope(t *testing.T) {
+	h := &handler{}
+	body := validSOPDocumentRequestBody(t, "2026-05-12.1", ruletypes.SOPApprovalStatusApproved)
+	createRW := httptest.NewRecorder()
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v2/ds/sop/documents", bytes.NewReader(body))
+	createReq = withSOPTestClaims(createReq)
+	h.CreateSOPDocument(createRW, createReq)
+	require.Equal(t, http.StatusCreated, createRW.Code)
+
+	bindingBody, err := json.Marshal(ruletypes.SOPBindingPreviewRequest{
+		Labels: map[string]string{
+			"environment": "stage",
+			"project_id":  "customer-b",
+			"sop_id":      "SOP-PAY-001",
+		},
+	})
+	require.NoError(t, err)
+	rw := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/ds/sop/bindings/preview", bytes.NewReader(bindingBody))
+	req = withSOPTestClaims(req)
+
+	h.PreviewSOPDocumentBinding(rw, req)
+
+	require.Equal(t, http.StatusForbidden, rw.Code)
+}
+
+func TestPreviewAIStrategyHandlerAllowsAndBlocksTenantScope(t *testing.T) {
+	doc := validSOPDocumentRequest(t, "2026-05-12.1", ruletypes.SOPApprovalStatusApproved)
+	reqBody := ruletypes.AIStrategyRequest{
+		IncidentID:       "INC-20260513-001",
+		AlertFingerprint: "fp-payment-api-5xx",
+		Labels: map[string]string{
+			"environment":  "prod",
+			"project_id":   "customer-a",
+			"service.name": "payment-api",
+			"severity":     "critical",
+			"sop_id":       "SOP-PAY-001",
+		},
+		SOPDocument: doc,
+		EvidenceRefs: []ruletypes.AIEvidenceRef{{
+			RefID:       "metric:error_rate:1",
+			Type:        "metric",
+			Observation: "5xx rate rose from 0.2% to 12%",
+			Confidence:  ruletypes.AIConfidenceHigh,
+		}},
+		GeneratedAt: "2026-05-13T00:00:00Z",
+	}
+
+	body, err := json.Marshal(reqBody)
+	require.NoError(t, err)
+	rw := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/ds/ai/strategy/preview", bytes.NewReader(body))
+	req = withSOPTestClaims(req)
+
+	(&handler{}).PreviewAIStrategy(rw, req)
+
+	require.Equal(t, http.StatusOK, rw.Code)
+	var got struct {
+		Data ruletypes.AIStrategy `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rw.Body.Bytes(), &got))
+	require.Equal(t, ruletypes.AIStrategyStatusReady, got.Data.Status)
+
+	reqBody.Labels["project_id"] = "customer-b"
+	reqBody.Labels["environment"] = "stage"
+	deniedBody, err := json.Marshal(reqBody)
+	require.NoError(t, err)
+	deniedRW := httptest.NewRecorder()
+	deniedReq := httptest.NewRequest(http.MethodPost, "/api/v2/ds/ai/strategy/preview", bytes.NewReader(deniedBody))
+	deniedReq = withSOPTestClaims(deniedReq)
+
+	(&handler{}).PreviewAIStrategy(deniedRW, deniedReq)
+
+	require.Equal(t, http.StatusOK, deniedRW.Code)
+	require.NoError(t, json.Unmarshal(deniedRW.Body.Bytes(), &got))
+	require.Equal(t, ruletypes.AIStrategyStatusBlockedByPolicy, got.Data.Status)
+	require.Contains(t, got.Data.Limitations, ruletypes.SOPTenantPolicyDeniedWarning)
 }
 
 func validSOPDocumentRequestBody(t *testing.T, version string, approvalStatus string) []byte {
@@ -347,6 +458,10 @@ func validSOPDocumentRequest(t *testing.T, version string, approvalStatus string
 	source := ruletypes.PilotManagedMarkdownSource{
 		SourceID:              "src-managed-markdown-default",
 		ServiceAccountProfile: "ds-sop-reader",
+		TenantScope: ruletypes.PilotTenantScope{
+			ProjectIDs:   []string{"customer-a"},
+			Environments: []string{"prod"},
+		},
 	}
 	doc := ruletypes.PilotManagedMarkdownDocument{
 		SOPID:        "SOP-PAY-001",
@@ -370,4 +485,15 @@ func muxSetVar(req *http.Request, key, value string) *http.Request {
 	}
 	vars[key] = value
 	return mux.SetURLVars(req, vars)
+}
+
+func withSOPTestClaims(req *http.Request) *http.Request {
+	claims := authtypes.Claims{
+		UserID:         "user-123",
+		Principal:      authtypes.PrincipalUser,
+		Email:          "operator@example.com",
+		OrgID:          "00000000-0000-0000-0000-000000000001",
+		IdentNProvider: authtypes.IdentNProviderTokenizer,
+	}
+	return req.WithContext(authtypes.NewContextWithClaims(req.Context(), claims))
 }

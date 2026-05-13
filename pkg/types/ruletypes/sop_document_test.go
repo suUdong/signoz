@@ -18,6 +18,8 @@ func TestValidateSOPDocumentAcceptsManagedMarkdownDocument(t *testing.T) {
 	require.False(t, doc.SecurityContext.SecretRefVisible)
 	require.False(t, doc.SecurityContext.BrowserCredentialsUsed)
 	require.True(t, doc.SecurityContext.RedactionApplied)
+	require.Equal(t, []string{"customer-a"}, doc.TenantScope.ProjectIDs)
+	require.Equal(t, []string{"prod"}, doc.TenantScope.Environments)
 }
 
 func TestNewSOPDocumentFromManagedMarkdownNormalizesAndValidates(t *testing.T) {
@@ -43,6 +45,10 @@ func TestValidateSOPDocumentRejectsRequiredFieldAndEnumGaps(t *testing.T) {
 	missingChecksum := validSOPDocument()
 	missingChecksum.Checksum = ""
 	require.ErrorContains(t, ValidateSOPDocument(missingChecksum), "checksum: field is required")
+
+	missingTenant := validSOPDocument()
+	missingTenant.TenantScope.ProjectIDs = nil
+	require.ErrorContains(t, ValidateSOPDocument(missingTenant), "tenantScope.projectIds: must include at least one project")
 
 	unsupportedStatus := validSOPDocument()
 	unsupportedStatus.ApprovalStatus = "half_approved"
@@ -126,7 +132,11 @@ func TestNewSOPDocumentListResponseOmitsBodyMarkdown(t *testing.T) {
 
 func TestPreviewSOPDocumentBindingResolvesExplicitLabel(t *testing.T) {
 	resp, err := PreviewSOPDocumentBinding([]SOPDocument{validSOPDocument()}, SOPBindingPreviewRequest{
-		Labels: map[string]string{"sop_id": "SOP-PAY-001"},
+		Labels: map[string]string{
+			"environment": "prod",
+			"project_id":  "customer-a",
+			"sop_id":      "SOP-PAY-001",
+		},
 	})
 
 	require.NoError(t, err)
@@ -140,7 +150,11 @@ func TestPreviewSOPDocumentBindingResolvesExplicitLabel(t *testing.T) {
 
 func TestPreviewSOPDocumentBindingReportsMissingAndDisabled(t *testing.T) {
 	missing, err := PreviewSOPDocumentBinding([]SOPDocument{validSOPDocument()}, SOPBindingPreviewRequest{
-		Labels: map[string]string{"sop_id": "SOP-UNKNOWN"},
+		Labels: map[string]string{
+			"environment": "prod",
+			"project_id":  "customer-a",
+			"sop_id":      "SOP-UNKNOWN",
+		},
 	})
 	require.NoError(t, err)
 	require.Equal(t, SOPBindingStatusMissing, missing.Status)
@@ -149,11 +163,36 @@ func TestPreviewSOPDocumentBindingReportsMissingAndDisabled(t *testing.T) {
 	disabledDoc := validSOPDocument()
 	disabledDoc.ApprovalStatus = SOPApprovalStatusDisabled
 	disabled, err := PreviewSOPDocumentBinding([]SOPDocument{disabledDoc}, SOPBindingPreviewRequest{
-		Labels: map[string]string{"sop_id": "SOP-PAY-001"},
+		Labels: map[string]string{
+			"environment": "prod",
+			"project_id":  "customer-a",
+			"sop_id":      "SOP-PAY-001",
+		},
 	})
 	require.NoError(t, err)
 	require.Equal(t, SOPBindingStatusDisabled, disabled.Status)
 	require.Contains(t, disabled.Warnings, "sop document is disabled")
+}
+
+func TestPreviewSOPDocumentBindingEnforcesTenantScope(t *testing.T) {
+	missingTenant, err := PreviewSOPDocumentBinding([]SOPDocument{validSOPDocument()}, SOPBindingPreviewRequest{
+		Labels: map[string]string{"sop_id": "SOP-PAY-001"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, SOPBindingStatusMissing, missingTenant.Status)
+	require.Contains(t, missingTenant.Warnings, SOPTenantPolicyMissingLabelsWarning)
+
+	forbidden, err := PreviewSOPDocumentBinding([]SOPDocument{validSOPDocument()}, SOPBindingPreviewRequest{
+		Labels: map[string]string{
+			"environment": "stage",
+			"project_id":  "customer-b",
+			"sop_id":      "SOP-PAY-001",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, SOPBindingStatusForbidden, forbidden.Status)
+	require.Contains(t, forbidden.Warnings, SOPTenantPolicyDeniedWarning)
+	require.NoError(t, ValidateSOPBindingPreviewResponse(forbidden))
 }
 
 func validSOPDocument() SOPDocument {

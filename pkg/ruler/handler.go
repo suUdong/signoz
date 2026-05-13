@@ -20,6 +20,7 @@ type Handler interface {
 	GetSOPDocument(http.ResponseWriter, *http.Request)
 	FetchSOPDocumentVersion(http.ResponseWriter, *http.Request)
 	PreviewSOPDocumentBinding(http.ResponseWriter, *http.Request)
+	PreviewAIStrategy(http.ResponseWriter, *http.Request)
 
 	ListDowntimeSchedules(http.ResponseWriter, *http.Request)
 	GetDowntimeScheduleByID(http.ResponseWriter, *http.Request)

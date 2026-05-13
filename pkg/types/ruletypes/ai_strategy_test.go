@@ -83,6 +83,36 @@ func TestGenerateLocalAIStrategyBlocksUnsafeSOPBeforeGeneration(t *testing.T) {
 	require.NoError(t, ValidateAIStrategy(strategy))
 }
 
+func TestGenerateLocalAIStrategyBlocksMissingTenantLabels(t *testing.T) {
+	req := validAIStrategyRequest()
+	delete(req.Labels, "project_id")
+
+	strategy, err := GenerateLocalAIStrategy(req)
+
+	require.NoError(t, err)
+	require.Equal(t, AIStrategyStatusBlockedByPolicy, strategy.Status)
+	require.Empty(t, strategy.Hypotheses)
+	require.Empty(t, strategy.FirstActions)
+	require.Contains(t, strategy.Limitations, SOPTenantPolicyMissingLabelsWarning)
+	require.NoError(t, ValidateAIStrategy(strategy))
+}
+
+func TestGenerateLocalAIStrategyBlocksCrossTenantSOP(t *testing.T) {
+	req := validAIStrategyRequest()
+	req.Labels["project_id"] = "customer-b"
+	req.Labels["environment"] = "stage"
+
+	strategy, err := GenerateLocalAIStrategy(req)
+
+	require.NoError(t, err)
+	require.Equal(t, AIStrategyStatusBlockedByPolicy, strategy.Status)
+	require.Equal(t, "SOP-PAY-001", strategy.SOPID)
+	require.Empty(t, strategy.Hypotheses)
+	require.Empty(t, strategy.FirstActions)
+	require.Contains(t, strategy.Limitations, SOPTenantPolicyDeniedWarning)
+	require.NoError(t, ValidateAIStrategy(strategy))
+}
+
 func TestValidateAIStrategyRejectsUngroundedReadyOutput(t *testing.T) {
 	strategy, err := GenerateLocalAIStrategy(validAIStrategyRequest())
 	require.NoError(t, err)
@@ -158,6 +188,8 @@ func validAIStrategyRequest() AIStrategyRequest {
 		IncidentID:       "INC-20260512-001",
 		AlertFingerprint: "fp-payment-api-5xx",
 		Labels: map[string]string{
+			"environment":  "prod",
+			"project_id":   "customer-a",
 			"service.name": "payment-api",
 			"severity":     "critical",
 			"sop_id":       "SOP-PAY-001",

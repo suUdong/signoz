@@ -112,6 +112,21 @@ func GenerateLocalAIStrategy(req AIStrategyRequest) (AIStrategy, error) {
 
 	strategy.SOPID = strings.TrimSpace(req.SOPDocument.SOPID)
 	strategy.SOPVersion = strings.TrimSpace(req.SOPDocument.Version)
+	tenant := PilotTenantFromLabels(req.Labels)
+	if !PilotTenantIsComplete(tenant) {
+		strategy.Status = AIStrategyStatusBlockedByPolicy
+		strategy.Confidence = AIConfidenceLow
+		strategy.Headline = "테넌트 라벨이 없어 AI 대응전략을 생성하지 않았습니다."
+		strategy.Limitations = []string{SOPTenantPolicyMissingLabelsWarning}
+		return strategy, ValidateAIStrategy(strategy)
+	}
+	if !PilotTenantScopeAllows(req.SOPDocument.TenantScope, tenant) {
+		strategy.Status = AIStrategyStatusBlockedByPolicy
+		strategy.Confidence = AIConfidenceLow
+		strategy.Headline = "SOP 문서의 테넌트 범위가 알림 라벨과 일치하지 않아 AI 대응전략을 생성하지 않았습니다."
+		strategy.Limitations = []string{SOPTenantPolicyDeniedWarning}
+		return strategy, ValidateAIStrategy(strategy)
+	}
 	if err := ValidateSOPDocument(req.SOPDocument); err != nil {
 		strategy.Status = AIStrategyStatusBlockedByPolicy
 		strategy.Confidence = AIConfidenceLow

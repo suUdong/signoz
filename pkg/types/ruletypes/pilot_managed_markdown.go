@@ -28,6 +28,7 @@ type PilotManagedMarkdownSource struct {
 	LastHealthCheckAt     string                         `json:"lastHealthCheckAt,omitempty"`
 	LastSyncAt            string                         `json:"lastSyncAt,omitempty"`
 	ServiceAccountProfile string                         `json:"serviceAccountProfile"`
+	TenantScope           PilotTenantScope               `json:"tenantScope"`
 	ConfiguredBy          string                         `json:"configuredBy,omitempty"`
 	Documents             []PilotManagedMarkdownDocument `json:"documents,omitempty"`
 	Warnings              []string                       `json:"warnings,omitempty"`
@@ -154,6 +155,11 @@ func FetchPilotManagedMarkdownSOP(source PilotManagedMarkdownSource, req PilotSO
 	if req.AuditMode != PilotAuditModeRequired || !req.AuditAccepted {
 		return pilotSOPFetchDenied(req, securityContext, PilotSOPFetchStatusDenied, PilotAuditOutcomeDenied, "live_fetch_blocked_until_audit_contract_accepted", []string{
 			pilotBodyFetchDisabledUntilAuditContractEnabledWarning,
+		})
+	}
+	if !PilotTenantScopeAllows(source.TenantScope, req.Tenant) {
+		return pilotSOPFetchDenied(req, securityContext, PilotSOPFetchStatusDenied, PilotAuditOutcomeDenied, "tenant_scope_denied", []string{
+			SOPTenantPolicyDeniedWarning,
 		})
 	}
 

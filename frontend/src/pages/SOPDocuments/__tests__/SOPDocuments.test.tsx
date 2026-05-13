@@ -44,6 +44,10 @@ describe('SOPDocuments', () => {
 							sourceId: 'src-managed-markdown-default',
 							type: 'managed_markdown',
 						},
+						tenantScope: {
+							environments: ['prod'],
+							projectIds: ['customer-a'],
+						},
 						tags: ['payment-api'],
 						title: 'Payment API 5xx response',
 						updatedAt: '2026-05-12T00:00:00Z',
@@ -104,6 +108,10 @@ describe('SOPDocuments', () => {
 			version: '2026-05-12.2',
 			ownerTeam: 'checkout',
 			approvalStatus: 'approved',
+			tenantScope: {
+				environments: ['prod'],
+				projectIds: ['customer-a'],
+			},
 			source: {
 				sourceId: 'src-managed-markdown-default',
 				type: 'managed_markdown',
@@ -124,7 +132,11 @@ describe('SOPDocuments', () => {
 
 		await waitFor(() =>
 			expect(mockPreviewSopDocumentBinding).toHaveBeenCalledWith({
-				labels: { sop_id: 'SOP-PAY-001' },
+				labels: {
+					environment: 'prod',
+					project_id: 'customer-a',
+					sop_id: 'SOP-PAY-001',
+				},
 			}),
 		);
 		await expect(

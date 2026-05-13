@@ -48,7 +48,7 @@ func (provider *provider) addRulerRoutes(router *mux.Router) error {
 		Response:            new(ruletypes.Rule),
 		ResponseContentType: "application/json",
 		SuccessStatusCode:   http.StatusCreated,
-		ErrorStatusCodes:    []int{http.StatusBadRequest},
+		ErrorStatusCodes:    []int{http.StatusBadRequest, http.StatusUnauthorized},
 		SecuritySchemes:     newSecuritySchemes(types.RoleEditor),
 	})).Methods(http.MethodPost).GetError(); err != nil {
 		return err
@@ -109,7 +109,7 @@ func (provider *provider) addRulerRoutes(router *mux.Router) error {
 		Response:            new(ruletypes.GettableTestRule),
 		ResponseContentType: "application/json",
 		SuccessStatusCode:   http.StatusOK,
-		ErrorStatusCodes:    []int{http.StatusBadRequest},
+		ErrorStatusCodes:    []int{http.StatusBadRequest, http.StatusUnauthorized},
 		SecuritySchemes:     newSecuritySchemes(types.RoleEditor),
 	})).Methods(http.MethodPost).GetError(); err != nil {
 		return err
@@ -125,7 +125,7 @@ func (provider *provider) addRulerRoutes(router *mux.Router) error {
 		Response:            new(ruletypes.PreviewNotificationTemplateResponse),
 		ResponseContentType: "application/json",
 		SuccessStatusCode:   http.StatusOK,
-		ErrorStatusCodes:    []int{http.StatusBadRequest},
+		ErrorStatusCodes:    []int{http.StatusBadRequest, http.StatusUnauthorized},
 		SecuritySchemes:     newSecuritySchemes(types.RoleEditor),
 	})).Methods(http.MethodPost).GetError(); err != nil {
 		return err
@@ -184,7 +184,7 @@ func (provider *provider) addRulerRoutes(router *mux.Router) error {
 		Response:            new(ruletypes.PilotSOPSourceHealthResponse),
 		ResponseContentType: "application/json",
 		SuccessStatusCode:   http.StatusOK,
-		ErrorStatusCodes:    []int{http.StatusBadRequest, http.StatusNotFound},
+		ErrorStatusCodes:    []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusNotFound},
 		SecuritySchemes:     newSecuritySchemes(types.RoleViewer),
 	})).Methods(http.MethodGet).GetError(); err != nil {
 		return err
@@ -214,6 +214,7 @@ func (provider *provider) addRulerRoutes(router *mux.Router) error {
 		Response:            new(ruletypes.SOPDocumentListResponse),
 		ResponseContentType: "application/json",
 		SuccessStatusCode:   http.StatusOK,
+		ErrorStatusCodes:    []int{http.StatusUnauthorized},
 		SecuritySchemes:     newSecuritySchemes(types.RoleViewer),
 	})).Methods(http.MethodGet).GetError(); err != nil {
 		return err
@@ -227,7 +228,7 @@ func (provider *provider) addRulerRoutes(router *mux.Router) error {
 		Response:            new(ruletypes.SOPDocument),
 		ResponseContentType: "application/json",
 		SuccessStatusCode:   http.StatusOK,
-		ErrorStatusCodes:    []int{http.StatusBadRequest, http.StatusNotFound},
+		ErrorStatusCodes:    []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusNotFound},
 		SecuritySchemes:     newSecuritySchemes(types.RoleViewer),
 	})).Methods(http.MethodGet).GetError(); err != nil {
 		return err
@@ -241,7 +242,7 @@ func (provider *provider) addRulerRoutes(router *mux.Router) error {
 		Response:            new(ruletypes.SOPDocument),
 		ResponseContentType: "application/json",
 		SuccessStatusCode:   http.StatusOK,
-		ErrorStatusCodes:    []int{http.StatusBadRequest, http.StatusNotFound},
+		ErrorStatusCodes:    []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusNotFound},
 		SecuritySchemes:     newSecuritySchemes(types.RoleViewer),
 	})).Methods(http.MethodGet).GetError(); err != nil {
 		return err
@@ -257,7 +258,23 @@ func (provider *provider) addRulerRoutes(router *mux.Router) error {
 		Response:            new(ruletypes.SOPBindingPreviewResponse),
 		ResponseContentType: "application/json",
 		SuccessStatusCode:   http.StatusOK,
-		ErrorStatusCodes:    []int{http.StatusBadRequest},
+		ErrorStatusCodes:    []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden},
+		SecuritySchemes:     newSecuritySchemes(types.RoleViewer),
+	})).Methods(http.MethodPost).GetError(); err != nil {
+		return err
+	}
+
+	if err := router.Handle("/api/v2/ds/ai/strategy/preview", handler.New(provider.authZ.ViewAccess(provider.rulerHandler.PreviewAIStrategy), handler.OpenAPIDef{
+		ID:                  "PreviewAIStrategy",
+		Tags:                []string{"rules"},
+		Summary:             "Preview SOP-grounded AI response strategy",
+		Description:         "This endpoint generates a deterministic SOP-grounded AI response strategy preview from alert labels, redacted evidence refs, and a tenant-scoped SOP document",
+		Request:             new(ruletypes.AIStrategyRequest),
+		RequestContentType:  "application/json",
+		Response:            new(ruletypes.AIStrategy),
+		ResponseContentType: "application/json",
+		SuccessStatusCode:   http.StatusOK,
+		ErrorStatusCodes:    []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden},
 		SecuritySchemes:     newSecuritySchemes(types.RoleViewer),
 	})).Methods(http.MethodPost).GetError(); err != nil {
 		return err

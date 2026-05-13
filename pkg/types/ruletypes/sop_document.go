@@ -23,9 +23,10 @@ const (
 	SOPDocumentListContractVersion = "ds.sop_document_list.v1"
 	SOPBindingContractVersion      = "ds.sop_binding.v1"
 
-	SOPBindingStatusBound    = "bound"
-	SOPBindingStatusMissing  = "missing"
-	SOPBindingStatusDisabled = "disabled"
+	SOPBindingStatusBound     = "bound"
+	SOPBindingStatusMissing   = "missing"
+	SOPBindingStatusDisabled  = "disabled"
+	SOPBindingStatusForbidden = "forbidden"
 
 	SOPBindingResolutionExplicitLabel = "explicit_label"
 	SOPBindingResolutionNoMatch       = "no_match"
@@ -42,6 +43,7 @@ type SOPDocument struct {
 	DisplayURL      string                    `json:"displayUrl,omitempty"`
 	OwnerTeam       string                    `json:"ownerTeam"`
 	ApprovalStatus  string                    `json:"approvalStatus"`
+	TenantScope     PilotTenantScope          `json:"tenantScope"`
 	Tags            []string                  `json:"tags,omitempty"`
 	UpdatedAt       string                    `json:"updatedAt"`
 	SecurityContext PilotAuditSecurityContext `json:"securityContext"`
@@ -62,6 +64,7 @@ type SOPDocumentSummary struct {
 	DisplayURL      string            `json:"displayUrl,omitempty"`
 	OwnerTeam       string            `json:"ownerTeam"`
 	ApprovalStatus  string            `json:"approvalStatus"`
+	TenantScope     PilotTenantScope  `json:"tenantScope"`
 	Tags            []string          `json:"tags,omitempty"`
 	UpdatedAt       string            `json:"updatedAt"`
 }
@@ -102,6 +105,7 @@ func NewSOPDocumentFromManagedMarkdown(source PilotManagedMarkdownSource, doc Pi
 		DisplayURL:     strings.TrimSpace(doc.DisplayURL),
 		OwnerTeam:      strings.TrimSpace(ownerTeam),
 		ApprovalStatus: strings.TrimSpace(approvalStatus),
+		TenantScope:    normalizePilotTenantScope(source.TenantScope),
 		Tags:           doc.Tags,
 		UpdatedAt:      strings.TrimSpace(doc.UpdatedAt),
 		SecurityContext: PilotAuditSecurityContext{
@@ -136,6 +140,7 @@ func NewSOPDocumentSummary(doc SOPDocument) SOPDocumentSummary {
 		DisplayURL:      doc.DisplayURL,
 		OwnerTeam:       doc.OwnerTeam,
 		ApprovalStatus:  doc.ApprovalStatus,
+		TenantScope:     normalizePilotTenantScope(doc.TenantScope),
 		Tags:            doc.Tags,
 		UpdatedAt:       doc.UpdatedAt,
 	}
@@ -160,6 +165,25 @@ func PreviewSOPDocumentBinding(docs []SOPDocument, req SOPBindingPreviewRequest)
 			Resolution:      SOPBindingResolutionExplicitLabel,
 			SOPID:           sopID,
 			Warnings:        []string{"sop document was not found"},
+		}, nil
+	}
+	tenant := PilotTenantFromLabels(req.Labels)
+	if !PilotTenantIsComplete(tenant) {
+		return SOPBindingPreviewResponse{
+			ContractVersion: SOPBindingContractVersion,
+			Status:          SOPBindingStatusMissing,
+			Resolution:      SOPBindingResolutionExplicitLabel,
+			SOPID:           sopID,
+			Warnings:        []string{SOPTenantPolicyMissingLabelsWarning},
+		}, nil
+	}
+	if !PilotTenantScopeAllows(doc.TenantScope, tenant) {
+		return SOPBindingPreviewResponse{
+			ContractVersion: SOPBindingContractVersion,
+			Status:          SOPBindingStatusForbidden,
+			Resolution:      SOPBindingResolutionExplicitLabel,
+			SOPID:           sopID,
+			Warnings:        []string{SOPTenantPolicyDeniedWarning},
 		}, nil
 	}
 
@@ -206,6 +230,7 @@ func ValidateSOPDocument(doc SOPDocument) error {
 	}
 	pilotRequireNonEmpty(&errs, "ownerTeam", doc.OwnerTeam)
 	pilotRequireAllowed(&errs, "approvalStatus", doc.ApprovalStatus, allowedSOPApprovalStatuses)
+	validatePilotTenantScope(&errs, "tenantScope", doc.TenantScope)
 	pilotRequireNonEmpty(&errs, "updatedAt", doc.UpdatedAt)
 	pilotRequireNonEmpty(&errs, "securityContext.serviceAccountProfile", doc.SecurityContext.ServiceAccountProfile)
 	if doc.SecurityContext.SecretRefVisible {
@@ -252,6 +277,9 @@ func ValidateSOPBindingPreviewResponse(resp SOPBindingPreviewResponse) error {
 		pilotRequireNonEmpty(&errs, "title", resp.Title)
 		pilotRequireNonEmpty(&errs, "sourceId", resp.SourceID)
 	}
+	if resp.Status == SOPBindingStatusForbidden {
+		pilotRequireNonEmpty(&errs, "sopId", resp.SOPID)
+	}
 
 	pilotAppendSecretLikeStringErrors(&errs, "sopId", resp.SOPID)
 	pilotAppendSecretLikeStringErrors(&errs, "version", resp.Version)
@@ -282,9 +310,10 @@ var allowedSOPApprovalStatuses = map[string]struct{}{
 }
 
 var allowedSOPBindingStatuses = map[string]struct{}{
-	SOPBindingStatusBound:    {},
-	SOPBindingStatusMissing:  {},
-	SOPBindingStatusDisabled: {},
+	SOPBindingStatusBound:     {},
+	SOPBindingStatusMissing:   {},
+	SOPBindingStatusDisabled:  {},
+	SOPBindingStatusForbidden: {},
 }
 
 var allowedSOPBindingResolutions = map[string]struct{}{

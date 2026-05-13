@@ -66,6 +66,20 @@ func TestFetchPilotManagedMarkdownSOPReturnsBodyWithAllowedAudit(t *testing.T) {
 	require.NoError(t, ValidatePilotSOPFetchResponse(resp))
 }
 
+func TestFetchPilotManagedMarkdownSOPDeniesCrossTenantFetch(t *testing.T) {
+	req := validPilotSOPFetchRequest(true)
+	req.Tenant.ProjectID = "customer-b"
+	req.Tenant.Environment = "stage"
+
+	resp, err := FetchPilotManagedMarkdownSOP(validPilotManagedMarkdownSource(), req)
+
+	require.NoError(t, err)
+	require.Equal(t, PilotSOPFetchStatusDenied, resp.Status)
+	require.Equal(t, PilotAuditOutcomeDenied, resp.AuditEvent.Outcome)
+	require.Equal(t, "tenant_scope_denied", resp.AuditEvent.Reason)
+	require.Contains(t, resp.Warnings, SOPTenantPolicyDeniedWarning)
+}
+
 func TestFetchPilotManagedMarkdownSOPRejectsSecretLikeDocumentBody(t *testing.T) {
 	source := validPilotManagedMarkdownSource()
 	source.Documents[0].BodyMarkdown = "Run curl with access_token=hidden"
@@ -272,7 +286,11 @@ func validPilotManagedMarkdownSource() PilotManagedMarkdownSource {
 		LastHealthCheckAt:     "2026-04-30T00:00:00Z",
 		LastSyncAt:            "2026-04-30T00:00:00Z",
 		ServiceAccountProfile: "ds-sop-reader",
-		ConfiguredBy:          "ds-admin",
+		TenantScope: PilotTenantScope{
+			ProjectIDs:   []string{"customer-a"},
+			Environments: []string{"prod"},
+		},
+		ConfiguredBy: "ds-admin",
 		Documents: []PilotManagedMarkdownDocument{
 			{
 				SOPID:        "SOP-PAY-001",

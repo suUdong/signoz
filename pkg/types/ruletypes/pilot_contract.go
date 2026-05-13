@@ -347,12 +347,7 @@ func ValidatePilotServiceAccountProfile(profile PilotServiceAccountProfile) erro
 		pilotRequireAllowed(&errs, fmt.Sprintf("allowedActions[%d]", i), action, allowedPilotAuditEventTypes)
 		pilotAppendSecretLikeStringErrors(&errs, fmt.Sprintf("allowedActions[%d]", i), action)
 	}
-	if len(profile.TenantScope.ProjectIDs) == 0 {
-		errs = append(errs, fmt.Errorf("tenantScope.projectIds: must include at least one project"))
-	}
-	if len(profile.TenantScope.Environments) == 0 {
-		errs = append(errs, fmt.Errorf("tenantScope.environments: must include at least one environment"))
-	}
+	validatePilotTenantScope(&errs, "tenantScope", profile.TenantScope)
 	if profile.SecretRefVisible {
 		errs = append(errs, fmt.Errorf("secretRefVisible: must be false for browser-visible service-account profiles"))
 	}
@@ -364,12 +359,6 @@ func ValidatePilotServiceAccountProfile(profile PilotServiceAccountProfile) erro
 	pilotAppendSecretLikeStringErrors(&errs, "profileId", profile.ProfileID)
 	pilotAppendSecretLikeStringErrors(&errs, "displayName", profile.DisplayName)
 	pilotAppendSecretLikeStringErrors(&errs, "purpose", profile.Purpose)
-	for i, projectID := range profile.TenantScope.ProjectIDs {
-		pilotAppendSecretLikeStringErrors(&errs, fmt.Sprintf("tenantScope.projectIds[%d]", i), projectID)
-	}
-	for i, environment := range profile.TenantScope.Environments {
-		pilotAppendSecretLikeStringErrors(&errs, fmt.Sprintf("tenantScope.environments[%d]", i), environment)
-	}
 	pilotAppendSecretLikeStringErrors(&errs, "rotationPolicy", profile.RotationPolicy)
 
 	return errors.Join(errs...)

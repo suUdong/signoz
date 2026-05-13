@@ -24,6 +24,8 @@ type SopDocumentFormState = {
 	displayUrl: string;
 	ownerTeam: string;
 	approvalStatus: SopApprovalStatus;
+	projectIds: string;
+	environments: string;
 	tags: string;
 	serviceAccountProfile: string;
 };
@@ -37,6 +39,8 @@ const DEFAULT_FORM_STATE: SopDocumentFormState = {
 	displayUrl: '',
 	ownerTeam: '',
 	approvalStatus: 'approved',
+	projectIds: 'customer-a',
+	environments: 'prod',
 	tags: '',
 	serviceAccountProfile: 'managed-markdown-local',
 };
@@ -74,6 +78,10 @@ function buildSopDocument(form: SopDocumentFormState): SopDocument {
 		displayUrl: form.displayUrl.trim() || undefined,
 		ownerTeam: form.ownerTeam.trim(),
 		approvalStatus: form.approvalStatus,
+		tenantScope: {
+			projectIds: parseTags(form.projectIds),
+			environments: parseTags(form.environments),
+		},
 		tags: parseTags(form.tags),
 		updatedAt: new Date().toISOString(),
 		securityContext: {
@@ -110,6 +118,8 @@ function isSubmitDisabled(form: SopDocumentFormState): boolean {
 		form.sourceId.trim() &&
 		form.bodyMarkdown.trim() &&
 		form.ownerTeam.trim() &&
+		form.projectIds.trim() &&
+		form.environments.trim() &&
 		form.serviceAccountProfile.trim()
 	);
 }
@@ -118,6 +128,8 @@ function SOPDocuments(): JSX.Element {
 	const [documents, setDocuments] = useState<SopDocumentSummary[]>([]);
 	const [form, setForm] = useState<SopDocumentFormState>(DEFAULT_FORM_STATE);
 	const [bindingSopId, setBindingSopId] = useState('');
+	const [bindingProjectId, setBindingProjectId] = useState('customer-a');
+	const [bindingEnvironment, setBindingEnvironment] = useState('prod');
 	const [bindingPreview, setBindingPreview] =
 		useState<SopBindingPreviewResult>();
 	const [isLoading, setIsLoading] = useState(false);
@@ -181,7 +193,11 @@ function SOPDocuments(): JSX.Element {
 		setError('');
 		try {
 			const response = await previewSopDocumentBinding({
-				labels: { sop_id: bindingSopId.trim() },
+				labels: {
+					environment: bindingEnvironment.trim(),
+					project_id: bindingProjectId.trim(),
+					sop_id: bindingSopId.trim(),
+				},
 			});
 			setBindingPreview(response.data);
 		} catch (requestError) {
@@ -189,7 +205,7 @@ function SOPDocuments(): JSX.Element {
 		} finally {
 			setIsPreviewing(false);
 		}
-	}, [bindingSopId]);
+	}, [bindingEnvironment, bindingProjectId, bindingSopId]);
 
 	const columns = useMemo<ColumnsType<SopDocumentSummary>>(
 		() => [
@@ -223,6 +239,18 @@ function SOPDocuments(): JSX.Element {
 				render: (status: SopApprovalStatus): JSX.Element => (
 					<Tag color={status === 'approved' ? 'green' : 'default'}>{status}</Tag>
 				),
+			},
+			{
+				title: 'Tenant',
+				dataIndex: 'tenantScope',
+				key: 'tenantScope',
+				render: (tenantScope: SopDocumentSummary['tenantScope']): JSX.Element => {
+					const projectIds = tenantScope?.projectIds ?? [];
+					const environments = tenantScope?.environments ?? [];
+					return (
+						<span>{`${projectIds.join(',')} / ${environments.join(',')}`}</span>
+					);
+				},
 			},
 		],
 		[],
@@ -319,6 +347,30 @@ function SOPDocuments(): JSX.Element {
 							value={form.sourceId}
 						/>
 					</label>
+					<label htmlFor="sop-document-project-ids-input">
+						<span>Project IDs</span>
+						<Input
+							data-testid="sop-document-project-ids"
+							id="sop-document-project-ids-input"
+							onChange={(event): void =>
+								handleFormFieldChange('projectIds', event.target.value)
+							}
+							placeholder="customer-a"
+							value={form.projectIds}
+						/>
+					</label>
+					<label htmlFor="sop-document-environments-input">
+						<span>Environments</span>
+						<Input
+							data-testid="sop-document-environments"
+							id="sop-document-environments-input"
+							onChange={(event): void =>
+								handleFormFieldChange('environments', event.target.value)
+							}
+							placeholder="prod"
+							value={form.environments}
+						/>
+					</label>
 					<label htmlFor="sop-document-display-url-input">
 						<span>Display URL</span>
 						<Input
@@ -396,9 +448,25 @@ function SOPDocuments(): JSX.Element {
 						placeholder="SOP-PAY-001"
 						value={bindingSopId}
 					/>
+					<Input
+						data-testid="binding-project-id"
+						onChange={(event): void => setBindingProjectId(event.target.value)}
+						placeholder="customer-a"
+						value={bindingProjectId}
+					/>
+					<Input
+						data-testid="binding-environment"
+						onChange={(event): void => setBindingEnvironment(event.target.value)}
+						placeholder="prod"
+						value={bindingEnvironment}
+					/>
 					<Button
 						data-testid="preview-sop-binding"
-						disabled={!bindingSopId.trim()}
+						disabled={
+							!bindingSopId.trim() ||
+							!bindingProjectId.trim() ||
+							!bindingEnvironment.trim()
+						}
 						loading={isPreviewing}
 						onClick={handlePreviewBinding}
 					>

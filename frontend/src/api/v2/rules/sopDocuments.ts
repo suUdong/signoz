@@ -23,6 +23,11 @@ export type SopDocumentSecurityContext = {
 	redactionApplied: boolean;
 };
 
+export type SopTenantScope = {
+	projectIds: string[];
+	environments: string[];
+};
+
 export type SopDocument = {
 	contractVersion: typeof SOP_DOCUMENT_CONTRACT_VERSION;
 	sopId: string;
@@ -34,6 +39,7 @@ export type SopDocument = {
 	displayUrl?: string;
 	ownerTeam: string;
 	approvalStatus: SopApprovalStatus;
+	tenantScope: SopTenantScope;
 	tags?: string[];
 	updatedAt: string;
 	securityContext: SopDocumentSecurityContext;
@@ -56,7 +62,7 @@ export type SopBindingPreviewRequest = {
 
 export type SopBindingPreviewResult = {
 	contractVersion: typeof SOP_BINDING_CONTRACT_VERSION;
-	status: 'bound' | 'missing' | 'disabled';
+	status: 'bound' | 'missing' | 'disabled' | 'forbidden';
 	resolution: 'explicit_label' | 'no_match';
 	sopId?: string;
 	version?: string;
