@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/SigNoz/signoz/pkg/errors"
+	"github.com/SigNoz/signoz/pkg/types/alertmanagertypes"
 	commoncfg "github.com/prometheus/common/config"
 
 	"github.com/prometheus/alertmanager/config"
@@ -268,6 +269,16 @@ func (n *Email) Notify(ctx context.Context, as ...*types.Alert) (bool, error) {
 		}
 		fmt.Fprintf(buffer, "%s: %s\r\n", header, mime.QEncoding.Encode("utf-8", value))
 	}
+	for _, field := range alertmanagertypes.IncidentInfoFields(
+		alertmanagertypes.BuildSafeIncidentInfo(data.CommonLabels, data.CommonAnnotations),
+	) {
+		header := incidentHeaderName(field.Key)
+		if _, exists := n.conf.Headers[header]; exists {
+			continue
+		}
+		value := strings.NewReplacer("\r", " ", "\n", " ").Replace(field.Value)
+		fmt.Fprintf(buffer, "%s: %s\r\n", header, mime.QEncoding.Encode("utf-8", value))
+	}
 
 	if _, ok := n.conf.Headers["Message-Id"]; !ok {
 		fmt.Fprintf(buffer, "Message-Id: %s\r\n", fmt.Sprintf("<%d.%d@%s>", time.Now().UnixNano(), rand.Uint64(), n.hostname))
@@ -428,4 +439,21 @@ func (n *Email) getAuthSecret() (string, error) {
 		return string(content), nil
 	}
 	return string(n.conf.AuthSecret), nil
+}
+
+func incidentHeaderName(key string) string {
+	parts := strings.Split(key, "_")
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		switch part {
+		case "ai", "id", "sop", "url":
+			parts[i] = strings.ToUpper(part)
+		default:
+			parts[i] = strings.ToUpper(part[:1]) + part[1:]
+		}
+	}
+
+	return "X-DS-APM-" + strings.Join(parts, "-")
 }

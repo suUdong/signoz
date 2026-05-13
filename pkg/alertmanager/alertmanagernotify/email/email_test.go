@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/SigNoz/signoz/pkg/errors"
+	"github.com/SigNoz/signoz/pkg/types/alertmanagertypes"
 	"github.com/emersion/go-smtp"
 	commoncfg "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
@@ -720,6 +721,79 @@ func TestEmailRejected(t *testing.T) {
 	}, time.Second*10, time.Millisecond*100, "mock SMTP server goroutine failed to close in time")
 }
 
+func TestEmailNotifyIncludesSanitizedIncidentHeaders(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	t.Cleanup(cancel)
+
+	messages := make(chan string, 1)
+	srv, l, err := capturingSMTPServer(t, messages)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = srv.Shutdown(ctx)
+	})
+
+	done := make(chan any, 1)
+	go func() {
+		assert.NoError(t, srv.Serve(l))
+		close(done)
+	}()
+
+	require.Eventuallyf(t, func() bool {
+		c, err := smtp.Dial(srv.Addr)
+		if err != nil {
+			t.Logf("dial failed to %q: %s", srv.Addr, err)
+			return false
+		}
+		if err = c.Noop(); err != nil {
+			t.Logf("ping failed to %q: %s", srv.Addr, err)
+			return false
+		}
+		require.NoError(t, c.Close())
+		return true
+	}, time.Second*10, time.Millisecond*100, "mock SMTP server failed to start")
+
+	require.IsType(t, &net.TCPAddr{}, l.Addr())
+	addr := l.Addr().(*net.TCPAddr)
+	cfg := &config.EmailConfig{
+		Smarthost: config.HostPort{Host: addr.IP.String(), Port: strconv.Itoa(addr.Port)},
+		Hello:     "localhost",
+		Headers:   make(map[string]string),
+		From:      "alertmanager@system",
+		To:        "sre@company",
+		Text:      "body",
+	}
+	tmpl, _, err := prepare(cfg)
+	require.NoError(t, err)
+
+	e := New(cfg, tmpl, promslog.NewNopLogger())
+	retry, err := e.Notify(ctx, emailAlertWithDSAPMIncidentFields())
+	require.NoError(t, err)
+	require.False(t, retry)
+
+	var raw string
+	select {
+	case raw = <-messages:
+	case <-time.After(time.Second * 3):
+		t.Fatal("timed out waiting for SMTP message")
+	}
+	require.Contains(t, raw, "X-DS-APM-SOP-ID: SOP-PAY-001")
+	require.Contains(t, raw, "X-DS-APM-AI-Strategy-Status: quota_exhausted")
+	require.Contains(t, raw, "X-DS-APM-AI-Headline: [redacted]")
+	require.Contains(t, raw, "X-DS-APM-SOP-URL: https://runbooks.example.com/payment-latency?view=public")
+	require.NotContains(t, raw, "token=hidden")
+	require.NotContains(t, raw, "bearer abcdefghijklmnopqrstuvwxyz")
+
+	require.NoError(t, srv.Shutdown(ctx))
+	require.Eventuallyf(t, func() bool {
+		select {
+		case <-done:
+			return true
+		default:
+			return false
+		}
+	}, time.Second*10, time.Millisecond*100, "mock SMTP server goroutine failed to close in time")
+}
+
 func mockSMTPServer(t *testing.T) (*smtp.Server, net.Listener, error) {
 	t.Helper()
 
@@ -735,6 +809,27 @@ func mockSMTPServer(t *testing.T) (*smtp.Server, net.Listener, error) {
 	}
 
 	s := smtp.NewServer(&rejectingBackend{})
+	s.Addr = addr.String()
+	s.WriteTimeout = 10 * time.Second
+	s.ReadTimeout = 10 * time.Second
+
+	return s, l, nil
+}
+
+func capturingSMTPServer(t *testing.T, messages chan<- string) (*smtp.Server, net.Listener, error) {
+	t.Helper()
+
+	l, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		return nil, nil, errors.WrapInternalf(err, errors.CodeInternal, "connect")
+	}
+
+	addr, ok := l.Addr().(*net.TCPAddr)
+	if !ok {
+		return nil, nil, errors.NewInternalf(errors.CodeInternal, "unexpected address type: %T", l.Addr())
+	}
+
+	s := smtp.NewServer(&capturingBackend{messages: messages})
 	s.Addr = addr.String()
 	s.WriteTimeout = 10 * time.Second
 	s.ReadTimeout = 10 * time.Second
@@ -772,6 +867,65 @@ func (s *mockSMTPSession) Data(io.Reader) error {
 func (*mockSMTPSession) Reset() {}
 
 func (*mockSMTPSession) Logout() error { return nil }
+
+type capturingBackend struct {
+	messages chan<- string
+}
+
+func (b *capturingBackend) NewSession(*smtp.Conn) (smtp.Session, error) {
+	return &capturingSMTPSession{messages: b.messages}, nil
+}
+
+type capturingSMTPSession struct {
+	messages chan<- string
+}
+
+func (*capturingSMTPSession) Mail(string, *smtp.MailOptions) error {
+	return nil
+}
+
+func (*capturingSMTPSession) Rcpt(string, *smtp.RcptOptions) error {
+	return nil
+}
+
+func (s *capturingSMTPSession) Data(r io.Reader) error {
+	message, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	s.messages <- string(message)
+	return nil
+}
+
+func (*capturingSMTPSession) Reset() {}
+
+func (*capturingSMTPSession) Logout() error { return nil }
+
+func emailAlertWithDSAPMIncidentFields() *types.Alert {
+	return &types.Alert{
+		Alert: model.Alert{
+			Labels: model.LabelSet{
+				"alertname": "CheckoutLatencyHigh",
+				model.LabelName(alertmanagertypes.IncidentLabelProjectID):   "customer-a",
+				model.LabelName(alertmanagertypes.IncidentLabelEnvironment): "prod",
+				model.LabelName(alertmanagertypes.IncidentLabelServiceName): "checkout-api",
+				model.LabelName(alertmanagertypes.IncidentLabelOwnerTeam):   "sm-payments",
+				model.LabelName(alertmanagertypes.IncidentLabelSeverity):    "critical",
+				model.LabelName(alertmanagertypes.IncidentLabelSopID):       "SOP-PAY-001",
+			},
+			Annotations: model.LabelSet{
+				model.LabelName(alertmanagertypes.IncidentAnnotationSopURL):           "https://runbooks.example.com/payment-latency?token=hidden&view=public",
+				model.LabelName(alertmanagertypes.IncidentAnnotationSopTitle):         "Payment API 5xx response",
+				model.LabelName(alertmanagertypes.IncidentAnnotationAIStrategyID):     "AIS-20260513-0005",
+				model.LabelName(alertmanagertypes.IncidentAnnotationAIStrategyStatus): "quota_exhausted",
+				model.LabelName(alertmanagertypes.IncidentAnnotationAIHeadline):       "bearer abcdefghijklmnopqrstuvwxyz",
+				model.LabelName(alertmanagertypes.IncidentAnnotationAILimitations):    "AI strategy quota is exhausted for this period.",
+			},
+			StartsAt: time.Now(),
+			EndsAt:   time.Now().Add(time.Hour),
+		},
+	}
+}
 
 func TestEmailNotifyWithThreading(t *testing.T) {
 	cfgFile := os.Getenv(emailNoAuthConfigVar)

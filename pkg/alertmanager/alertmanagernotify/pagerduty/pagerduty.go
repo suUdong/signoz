@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/SigNoz/signoz/pkg/errors"
+	"github.com/SigNoz/signoz/pkg/types/alertmanagertypes"
 	"github.com/alecthomas/units"
 	commoncfg "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
@@ -317,6 +318,11 @@ func (n *Notifier) Notify(ctx context.Context, as ...*types.Alert) (bool, error)
 	details, err := n.renderDetails(data)
 	if err != nil {
 		return false, errors.WrapInternalf(err, errors.CodeInternal, "failed to render details: %v", err)
+	}
+	if incidentDetails := alertmanagertypes.IncidentInfoDetails(
+		alertmanagertypes.BuildSafeIncidentInfo(data.CommonLabels, data.CommonAnnotations),
+	); len(incidentDetails) > 0 {
+		details["ds_apm_incident"] = incidentDetails
 	}
 
 	if n.conf.Timeout > 0 {

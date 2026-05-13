@@ -89,7 +89,7 @@ func (n *Notifier) Notify(ctx context.Context, alerts ...*types.Alert) (bool, er
 	logger := n.logger.With(slog.Any("group_key", groupKey))
 	logger.DebugContext(ctx, "extracted group key")
 
-	incident := alertmanagertypes.BuildIncidentInfo(data.CommonLabels, data.CommonAnnotations)
+	incident := alertmanagertypes.BuildSafeIncidentInfo(data.CommonLabels, data.CommonAnnotations)
 	msg := &Message{
 		Version:         "4",
 		Data:            data,

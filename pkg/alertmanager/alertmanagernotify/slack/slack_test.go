@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SigNoz/signoz/pkg/types/alertmanagertypes"
 	commoncfg "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/promslog"
@@ -339,5 +340,90 @@ func TestSlackMessageField(t *testing.T) {
 
 	if _, err := notifier.Notify(ctx); err != nil {
 		t.Fatal("Notify failed:", err)
+	}
+}
+
+func TestSlackPayloadIncludesSanitizedIncidentFields(t *testing.T) {
+	var body map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok": true}`))
+	}))
+	defer server.Close()
+
+	u, _ := url.Parse(server.URL)
+	notifier, err := New(
+		&config.SlackConfig{
+			APIURL:     &config.SecretURL{URL: u},
+			Channel:    "#test-channel",
+			HTTPConfig: &commoncfg.HTTPClientConfig{},
+		},
+		test.CreateTmpl(t),
+		promslog.NewNopLogger(),
+	)
+	require.NoError(t, err)
+
+	ctx := notify.WithGroupKey(context.Background(), "test-group-key")
+	alert := alertWithDSAPMIncidentFields()
+
+	_, err = notifier.Notify(ctx, alert)
+
+	require.NoError(t, err)
+	attachments, ok := body["attachments"].([]any)
+	require.True(t, ok)
+	require.Len(t, attachments, 1)
+	fields, ok := attachments[0].(map[string]any)["fields"].([]any)
+	require.True(t, ok)
+
+	fieldValues := slackFieldValues(fields)
+	require.Equal(t, "SOP-PAY-001", fieldValues["SOP ID"])
+	require.Equal(t, "quota_exhausted", fieldValues["AI status"])
+	require.Equal(t, alertmanagertypes.RedactedIncidentValue, fieldValues["AI headline"])
+	require.Equal(t, "https://runbooks.example.com/payment-latency?view=public", fieldValues["SOP URL"])
+	encodedBody, err := json.Marshal(body)
+	require.NoError(t, err)
+	require.NotContains(t, string(encodedBody), "token=hidden")
+}
+
+func slackFieldValues(fields []any) map[string]string {
+	values := make(map[string]string, len(fields))
+	for _, field := range fields {
+		fieldMap, ok := field.(map[string]any)
+		if !ok {
+			continue
+		}
+		title, _ := fieldMap["title"].(string)
+		value, _ := fieldMap["value"].(string)
+		values[title] = value
+	}
+
+	return values
+}
+
+func alertWithDSAPMIncidentFields() *types.Alert {
+	return &types.Alert{
+		Alert: model.Alert{
+			Labels: model.LabelSet{
+				"alertname": "CheckoutLatencyHigh",
+				model.LabelName(alertmanagertypes.IncidentLabelProjectID):   "customer-a",
+				model.LabelName(alertmanagertypes.IncidentLabelEnvironment): "prod",
+				model.LabelName(alertmanagertypes.IncidentLabelServiceName): "checkout-api",
+				model.LabelName(alertmanagertypes.IncidentLabelOwnerTeam):   "sm-payments",
+				model.LabelName(alertmanagertypes.IncidentLabelSeverity):    "critical",
+				model.LabelName(alertmanagertypes.IncidentLabelSopID):       "SOP-PAY-001",
+			},
+			Annotations: model.LabelSet{
+				model.LabelName(alertmanagertypes.IncidentAnnotationSopURL):           "https://runbooks.example.com/payment-latency?token=hidden&view=public",
+				model.LabelName(alertmanagertypes.IncidentAnnotationSopTitle):         "Payment API 5xx response",
+				model.LabelName(alertmanagertypes.IncidentAnnotationAIStrategyID):     "AIS-20260513-0005",
+				model.LabelName(alertmanagertypes.IncidentAnnotationAIStrategyStatus): "quota_exhausted",
+				model.LabelName(alertmanagertypes.IncidentAnnotationAIHeadline):       "bearer abcdefghijklmnopqrstuvwxyz",
+				model.LabelName(alertmanagertypes.IncidentAnnotationAILimitations):    "AI strategy quota is exhausted for this period.",
+			},
+			StartsAt: time.Now(),
+			EndsAt:   time.Now().Add(time.Hour),
+		},
 	}
 }

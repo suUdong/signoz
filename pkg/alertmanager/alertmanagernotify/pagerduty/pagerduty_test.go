@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/SigNoz/signoz/pkg/errors"
+	"github.com/SigNoz/signoz/pkg/types/alertmanagertypes"
 	commoncfg "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/promslog"
@@ -335,6 +336,75 @@ func TestPagerDutyTemplating(t *testing.T) {
 			}
 			require.Equal(t, tc.retry, ok)
 		})
+	}
+}
+
+func TestPagerDutyPayloadIncludesSanitizedIncidentDetails(t *testing.T) {
+	var event struct {
+		Payload struct {
+			CustomDetails map[string]any `json:"custom_details"`
+		} `json:"payload"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&event))
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+
+	u, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	notifier, err := New(
+		&config.PagerdutyConfig{
+			RoutingKey: config.Secret("01234567890123456789012345678901"),
+			URL:        &config.URL{URL: u},
+			HTTPConfig: &commoncfg.HTTPClientConfig{},
+		},
+		test.CreateTmpl(t),
+		promslog.NewNopLogger(),
+	)
+	require.NoError(t, err)
+
+	ctx := notify.WithGroupKey(context.Background(), "test-group-key")
+
+	_, err = notifier.Notify(ctx, alertWithDSAPMIncidentFields())
+
+	require.NoError(t, err)
+	incident, ok := event.Payload.CustomDetails["ds_apm_incident"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "SOP-PAY-001", incident["sop_id"])
+	require.Equal(t, "quota_exhausted", incident["ai_strategy_status"])
+	require.Equal(t, alertmanagertypes.RedactedIncidentValue, incident["ai_headline"])
+	require.Equal(t, "https://runbooks.example.com/payment-latency?view=public", incident["sop_url"])
+
+	encodedEvent, err := json.Marshal(event)
+	require.NoError(t, err)
+	require.NotContains(t, string(encodedEvent), "token=hidden")
+	require.NotContains(t, string(encodedEvent), "bearer abcdefghijklmnopqrstuvwxyz")
+}
+
+func alertWithDSAPMIncidentFields() *types.Alert {
+	return &types.Alert{
+		Alert: model.Alert{
+			Labels: model.LabelSet{
+				"alertname": "CheckoutLatencyHigh",
+				model.LabelName(alertmanagertypes.IncidentLabelProjectID):   "customer-a",
+				model.LabelName(alertmanagertypes.IncidentLabelEnvironment): "prod",
+				model.LabelName(alertmanagertypes.IncidentLabelServiceName): "checkout-api",
+				model.LabelName(alertmanagertypes.IncidentLabelOwnerTeam):   "sm-payments",
+				model.LabelName(alertmanagertypes.IncidentLabelSeverity):    "critical",
+				model.LabelName(alertmanagertypes.IncidentLabelSopID):       "SOP-PAY-001",
+			},
+			Annotations: model.LabelSet{
+				model.LabelName(alertmanagertypes.IncidentAnnotationSopURL):           "https://runbooks.example.com/payment-latency?token=hidden&view=public",
+				model.LabelName(alertmanagertypes.IncidentAnnotationSopTitle):         "Payment API 5xx response",
+				model.LabelName(alertmanagertypes.IncidentAnnotationAIStrategyID):     "AIS-20260513-0005",
+				model.LabelName(alertmanagertypes.IncidentAnnotationAIStrategyStatus): "quota_exhausted",
+				model.LabelName(alertmanagertypes.IncidentAnnotationAIHeadline):       "bearer abcdefghijklmnopqrstuvwxyz",
+				model.LabelName(alertmanagertypes.IncidentAnnotationAILimitations):    "AI strategy quota is exhausted for this period.",
+			},
+			StartsAt: time.Now(),
+			EndsAt:   time.Now().Add(time.Hour),
+		},
 	}
 }
 

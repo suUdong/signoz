@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/SigNoz/signoz/pkg/errors"
+	"github.com/SigNoz/signoz/pkg/types/alertmanagertypes"
 	commoncfg "github.com/prometheus/common/config"
 
 	"github.com/prometheus/alertmanager/config"
@@ -146,6 +147,16 @@ func (n *Notifier) Notify(ctx context.Context, as ...*types.Alert) (bool, error)
 			}
 		}
 		att.Fields = fields
+	}
+	for _, field := range alertmanagertypes.IncidentInfoFields(
+		alertmanagertypes.BuildSafeIncidentInfo(data.CommonLabels, data.CommonAnnotations),
+	) {
+		short := field.Short
+		att.Fields = append(att.Fields, config.SlackField{
+			Title: field.Title,
+			Value: field.Value,
+			Short: &short,
+		})
 	}
 
 	numActions := len(n.conf.Actions)

@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/SigNoz/signoz/pkg/errors"
+	"github.com/SigNoz/signoz/pkg/types/alertmanagertypes"
 	commoncfg "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 
@@ -230,6 +231,20 @@ func (n *Notifier) Notify(ctx context.Context, as ...*types.Alert) (bool, error)
 
 func (*Notifier) createLabelsAndAnnotationsBody(alert *types.Alert) []Body {
 	bodies := []Body{}
+	incidentFacts := incidentInfoFactsForAlert(alert)
+	if len(incidentFacts) > 0 {
+		bodies = append(bodies, Body{
+			Type:   "TextBlock",
+			Text:   "DS-APM response",
+			Weight: "Bolder",
+			Size:   "Medium",
+		})
+		bodies = append(bodies, Body{
+			Type:  "FactSet",
+			Facts: incidentFacts,
+		})
+	}
+
 	bodies = append(bodies, Body{
 		Type:   "TextBlock",
 		Text:   "Labels",
@@ -242,7 +257,7 @@ func (*Notifier) createLabelsAndAnnotationsBody(alert *types.Alert) []Body {
 		if slices.Contains([]string{"alertname", "severity", "ruleId", "ruleSource"}, string(k)) {
 			continue
 		}
-		facts = append(facts, Fact{Title: string(k), Value: string(v)})
+		facts = append(facts, Fact{Title: string(k), Value: alertmanagertypes.SanitizeIncidentValue(string(v))})
 	}
 	bodies = append(bodies, Body{
 		Type:  "FactSet",
@@ -261,7 +276,7 @@ func (*Notifier) createLabelsAndAnnotationsBody(alert *types.Alert) []Body {
 		if slices.Contains([]string{"summary", "related_logs", "related_traces"}, string(k)) {
 			continue
 		}
-		annotationsFacts = append(annotationsFacts, Fact{Title: string(k), Value: string(v)})
+		annotationsFacts = append(annotationsFacts, Fact{Title: string(k), Value: alertmanagertypes.SanitizeIncidentValue(string(v))})
 	}
 
 	bodies = append(bodies, Body{
@@ -270,4 +285,29 @@ func (*Notifier) createLabelsAndAnnotationsBody(alert *types.Alert) []Body {
 	})
 
 	return bodies
+}
+
+func incidentInfoFactsForAlert(alert *types.Alert) []Fact {
+	labels := labelSetToTemplateKV(alert.Labels)
+	annotations := labelSetToTemplateKV(alert.Annotations)
+	fields := alertmanagertypes.IncidentInfoFields(alertmanagertypes.BuildSafeIncidentInfo(labels, annotations))
+	if len(fields) == 0 {
+		return nil
+	}
+
+	facts := make([]Fact, 0, len(fields))
+	for _, field := range fields {
+		facts = append(facts, Fact{Title: field.Title, Value: field.Value})
+	}
+
+	return facts
+}
+
+func labelSetToTemplateKV(labels model.LabelSet) template.KV {
+	kv := make(template.KV, len(labels))
+	for key, value := range labels {
+		kv[string(key)] = string(value)
+	}
+
+	return kv
 }
