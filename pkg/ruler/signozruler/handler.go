@@ -27,6 +27,8 @@ type handler struct {
 	managedMarkdownDisabled atomic.Bool
 	sopDocumentsMu          sync.RWMutex
 	sopDocuments            map[string]ruletypes.SOPDocument
+	aiStrategyHistoryMu     sync.RWMutex
+	aiStrategyHistory       map[string]ruletypes.AIStrategyHistoryRecord
 }
 
 func NewHandler(ruler ruler.Ruler) ruler.Handler {
@@ -587,8 +589,36 @@ func (handler *handler) PreviewAIStrategy(rw http.ResponseWriter, req *http.Requ
 		render.Error(rw, errors.WrapInvalidInputf(err, errors.CodeInvalidInput, "AI strategy preview validation failed"))
 		return
 	}
+	if _, err := handler.storeAIStrategyHistory(strategy); err != nil {
+		render.Error(rw, errors.WrapInvalidInputf(err, errors.CodeInvalidInput, "AI strategy history validation failed"))
+		return
+	}
 
 	render.Success(rw, http.StatusOK, strategy)
+}
+
+func (handler *handler) GetLatestAIStrategyHistory(rw http.ResponseWriter, req *http.Request) {
+	if _, err := authtypes.ClaimsFromContext(req.Context()); err != nil {
+		render.Error(rw, err)
+		return
+	}
+
+	lookupReq := ruletypes.AIStrategyHistoryLookupRequest{
+		IncidentID:       req.URL.Query().Get("incidentId"),
+		AlertFingerprint: req.URL.Query().Get("alertFingerprint"),
+	}
+	if err := ruletypes.ValidateAIStrategyHistoryLookup(lookupReq); err != nil {
+		render.Error(rw, errors.WrapInvalidInputf(err, errors.CodeInvalidInput, "AI strategy history lookup validation failed"))
+		return
+	}
+
+	record, ok := handler.latestAIStrategyHistory(lookupReq)
+	if !ok {
+		render.Error(rw, errors.NewNotFoundf(errors.CodeNotFound, "AI strategy history was not found"))
+		return
+	}
+
+	render.Success(rw, http.StatusOK, record)
 }
 
 func (handler *handler) storeSOPDocument(doc ruletypes.SOPDocument) {
@@ -640,6 +670,39 @@ func (handler *handler) sopDocument(sopID string, version string) (ruletypes.SOP
 
 	doc, ok := handler.sopDocuments[sopDocumentKey(sopID, version)]
 	return doc, ok
+}
+
+func (handler *handler) storeAIStrategyHistory(strategy ruletypes.AIStrategy) (ruletypes.AIStrategyHistoryRecord, error) {
+	record, err := ruletypes.NewAIStrategyHistoryRecord(strategy)
+	if err != nil {
+		return record, err
+	}
+
+	handler.aiStrategyHistoryMu.Lock()
+	defer handler.aiStrategyHistoryMu.Unlock()
+
+	if handler.aiStrategyHistory == nil {
+		handler.aiStrategyHistory = map[string]ruletypes.AIStrategyHistoryRecord{}
+	}
+	for _, key := range ruletypes.AIStrategyHistoryLookupKeys(ruletypes.AIStrategyHistoryLookupFromStrategy(strategy)) {
+		handler.aiStrategyHistory[key] = record
+	}
+
+	return record, nil
+}
+
+func (handler *handler) latestAIStrategyHistory(req ruletypes.AIStrategyHistoryLookupRequest) (ruletypes.AIStrategyHistoryRecord, bool) {
+	handler.aiStrategyHistoryMu.RLock()
+	defer handler.aiStrategyHistoryMu.RUnlock()
+
+	for _, key := range ruletypes.AIStrategyHistoryLookupKeys(req) {
+		record, ok := handler.aiStrategyHistory[key]
+		if ok {
+			return record, true
+		}
+	}
+
+	return ruletypes.AIStrategyHistoryRecord{}, false
 }
 
 func sopDocumentKey(sopID string, version string) string {

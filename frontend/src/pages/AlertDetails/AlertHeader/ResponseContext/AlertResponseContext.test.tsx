@@ -354,6 +354,42 @@ describe('AlertResponseContext', () => {
 		expect(screen.queryByText('First actions')).not.toBeInTheDocument();
 	});
 
+	it('renders persisted AI strategy history before stale annotations', () => {
+		render(
+			<AlertResponseContext
+				annotations={{
+					ai_first_actions: 'stale action from annotation',
+					ai_strategy_status: 'ready',
+				}}
+				labels={{
+					sop_id: 'SOP-PAY-001',
+				}}
+				strategyHistory={{
+					strategy: {
+						confidence: 'low',
+						headline: 'AI 사용량 한도에 도달하여 SOP 기본 알림만 전송합니다.',
+						limitations: ['AI strategy quota is exhausted for this period.'],
+						status: 'quota_exhausted',
+						strategyId: 'AIS-20260513-0002',
+					},
+				}}
+			/>,
+		);
+
+		expect(screen.getByText('AI strategy')).toBeInTheDocument();
+		expect(screen.getByText('quota_exhausted')).toBeInTheDocument();
+		expect(
+			screen.getByText('AI 사용량 한도에 도달하여 SOP 기본 알림만 전송합니다.'),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText('AI strategy quota is exhausted for this period.'),
+		).toBeInTheDocument();
+		expect(screen.queryByText('ready')).not.toBeInTheDocument();
+		expect(
+			screen.queryByText('stale action from annotation'),
+		).not.toBeInTheDocument();
+	});
+
 	it('copies SOP status section and individual SOP URL', async () => {
 		const user = userEvent.setup();
 		render(

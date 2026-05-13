@@ -280,6 +280,21 @@ func (provider *provider) addRulerRoutes(router *mux.Router) error {
 		return err
 	}
 
+	if err := router.Handle("/api/v2/ds/ai/strategy/history/latest", handler.New(provider.authZ.ViewAccess(provider.rulerHandler.GetLatestAIStrategyHistory), handler.OpenAPIDef{
+		ID:                  "GetLatestAIStrategyHistory",
+		Tags:                []string{"rules"},
+		Summary:             "Get latest SOP-grounded AI response strategy",
+		Description:         "This endpoint returns the latest stored ds.ai_strategy.v1 result by incidentId or alertFingerprint for Alert Detail surfaces",
+		RequestQuery:        new(ruletypes.AIStrategyHistoryLookupRequest),
+		Response:            new(ruletypes.AIStrategyHistoryRecord),
+		ResponseContentType: "application/json",
+		SuccessStatusCode:   http.StatusOK,
+		ErrorStatusCodes:    []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusNotFound},
+		SecuritySchemes:     newSecuritySchemes(types.RoleViewer),
+	})).Methods(http.MethodGet).GetError(); err != nil {
+		return err
+	}
+
 	if err := router.Handle("/api/v1/downtime_schedules", handler.New(provider.authZ.ViewAccess(provider.rulerHandler.ListDowntimeSchedules), handler.OpenAPIDef{
 		ID:                  "ListDowntimeSchedules",
 		Tags:                []string{"downtimeschedules"},

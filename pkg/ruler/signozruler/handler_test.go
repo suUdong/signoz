@@ -446,6 +446,92 @@ func TestPreviewAIStrategyHandlerAllowsAndBlocksTenantScope(t *testing.T) {
 	require.Contains(t, got.Data.Limitations, ruletypes.SOPTenantPolicyDeniedWarning)
 }
 
+func TestPreviewAIStrategyHandlerPersistsLatestHistory(t *testing.T) {
+	doc := validSOPDocumentRequest(t, "2026-05-12.1", ruletypes.SOPApprovalStatusApproved)
+	reqBody := ruletypes.AIStrategyRequest{
+		IncidentID:       "INC-20260513-002",
+		AlertFingerprint: "fp-payment-api-history",
+		Labels: map[string]string{
+			"environment":  "prod",
+			"project_id":   "customer-a",
+			"service.name": "payment-api",
+			"severity":     "critical",
+			"sop_id":       "SOP-PAY-001",
+		},
+		SOPDocument: doc,
+		EvidenceRefs: []ruletypes.AIEvidenceRef{{
+			RefID:       "metric:error_rate:1",
+			Type:        "metric",
+			Observation: "5xx rate rose from 0.2% to 12%",
+			Confidence:  ruletypes.AIConfidenceHigh,
+		}},
+		GeneratedAt: "2026-05-13T00:00:00Z",
+	}
+
+	h := &handler{}
+	previewAIStrategyForTest(t, h, reqBody)
+
+	latestRW := httptest.NewRecorder()
+	latestReq := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v2/ds/ai/strategy/history/latest?incidentId=INC-20260513-002",
+		nil,
+	)
+	latestReq = withSOPTestClaims(latestReq)
+
+	h.GetLatestAIStrategyHistory(latestRW, latestReq)
+
+	require.Equal(t, http.StatusOK, latestRW.Code)
+	var latest struct {
+		Data ruletypes.AIStrategyHistoryRecord `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(latestRW.Body.Bytes(), &latest))
+	require.Equal(t, ruletypes.AIStrategyStatusReady, latest.Data.Status)
+	require.Equal(t, "INC-20260513-002", latest.Data.IncidentID)
+	require.Equal(t, "fp-payment-api-history", latest.Data.AlertFingerprint)
+
+	reqBody.GeneratedAt = "2026-05-13T00:01:00Z"
+	reqBody.Controls.QuotaLimit = 1
+	reqBody.Controls.QuotaUsed = 1
+	previewAIStrategyForTest(t, h, reqBody)
+
+	fingerprintRW := httptest.NewRecorder()
+	fingerprintReq := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v2/ds/ai/strategy/history/latest?alertFingerprint=fp-payment-api-history",
+		nil,
+	)
+	fingerprintReq = withSOPTestClaims(fingerprintReq)
+
+	h.GetLatestAIStrategyHistory(fingerprintRW, fingerprintReq)
+
+	require.Equal(t, http.StatusOK, fingerprintRW.Code)
+	require.NoError(t, json.Unmarshal(fingerprintRW.Body.Bytes(), &latest))
+	require.Equal(t, ruletypes.AIStrategyStatusQuotaExhausted, latest.Data.Status)
+	require.Equal(t, "2026-05-13T00:01:00Z", latest.Data.GeneratedAt)
+	require.Contains(t, latest.Data.Strategy.Limitations, ruletypes.AIQuotaExhaustedLimitation)
+}
+
+func TestGetLatestAIStrategyHistoryReportsInvalidAndMissingLookup(t *testing.T) {
+	h := &handler{}
+
+	missingKeyRW := httptest.NewRecorder()
+	missingKeyReq := httptest.NewRequest(http.MethodGet, "/api/v2/ds/ai/strategy/history/latest", nil)
+	missingKeyReq = withSOPTestClaims(missingKeyReq)
+	h.GetLatestAIStrategyHistory(missingKeyRW, missingKeyReq)
+	require.Equal(t, http.StatusBadRequest, missingKeyRW.Code)
+
+	notFoundRW := httptest.NewRecorder()
+	notFoundReq := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v2/ds/ai/strategy/history/latest?incidentId=INC-MISSING",
+		nil,
+	)
+	notFoundReq = withSOPTestClaims(notFoundReq)
+	h.GetLatestAIStrategyHistory(notFoundRW, notFoundReq)
+	require.Equal(t, http.StatusNotFound, notFoundRW.Code)
+}
+
 func validSOPDocumentRequestBody(t *testing.T, version string, approvalStatus string) []byte {
 	t.Helper()
 	body, err := json.Marshal(validSOPDocumentRequest(t, version, approvalStatus))
@@ -474,6 +560,24 @@ func validSOPDocumentRequest(t *testing.T, version string, approvalStatus string
 	}
 
 	return ruletypes.NewSOPDocumentFromManagedMarkdown(source, doc, "payments", approvalStatus)
+}
+
+func previewAIStrategyForTest(t *testing.T, h *handler, reqBody ruletypes.AIStrategyRequest) ruletypes.AIStrategy {
+	t.Helper()
+	body, err := json.Marshal(reqBody)
+	require.NoError(t, err)
+	rw := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/ds/ai/strategy/preview", bytes.NewReader(body))
+	req = withSOPTestClaims(req)
+
+	h.PreviewAIStrategy(rw, req)
+
+	require.Equal(t, http.StatusOK, rw.Code)
+	var got struct {
+		Data ruletypes.AIStrategy `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rw.Body.Bytes(), &got))
+	return got.Data
 }
 
 // muxSetVar injects gorilla/mux path variables into the request context,

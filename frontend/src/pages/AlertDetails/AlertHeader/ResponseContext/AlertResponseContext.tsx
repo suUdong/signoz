@@ -57,6 +57,7 @@ type AlertResponseContextProps = {
 	alertName?: string;
 	annotations?: Labels;
 	labels?: Labels;
+	strategyHistory?: AlertAIStrategyHistory;
 };
 
 type ResponseContextItem = ResponseContextField & { value: string };
@@ -64,6 +65,28 @@ type ResponseContextItem = ResponseContextField & { value: string };
 type ResponseContextSectionWithItems = {
 	title: string;
 	items: ResponseContextItem[];
+};
+
+type AlertAIStrategyAction = {
+	text?: string;
+};
+
+type AlertAIStrategyEvidenceRef = {
+	refId?: string;
+};
+
+type AlertAIStrategySnapshot = {
+	confidence?: string;
+	evidenceRefs?: AlertAIStrategyEvidenceRef[];
+	firstActions?: AlertAIStrategyAction[];
+	headline?: string;
+	limitations?: string[];
+	status?: string;
+	strategyId?: string;
+};
+
+export type AlertAIStrategyHistory = AlertAIStrategySnapshot & {
+	strategy?: AlertAIStrategySnapshot;
 };
 
 const COPY_SUCCESS_RESET_MS = 1500;
@@ -170,6 +193,59 @@ function getMetadataValue({
 	labels,
 }: AlertResponseContextProps & { key: string }): string | undefined {
 	return getTrimmedValue(annotations, key) || getTrimmedValue(labels, key);
+}
+
+function joinNonEmptyValues(
+	values: Array<string | undefined>,
+): string | undefined {
+	const joined = values
+		.map((value) => value?.trim())
+		.filter((value): value is string => Boolean(value))
+		.join('\n');
+
+	return joined || undefined;
+}
+
+function getAIStrategyHistorySnapshot(
+	strategyHistory?: AlertAIStrategyHistory,
+): AlertAIStrategySnapshot | undefined {
+	return strategyHistory?.strategy || strategyHistory;
+}
+
+function getAIStrategyHistoryValue({
+	key,
+	strategyHistory,
+}: Pick<AlertResponseContextProps, 'strategyHistory'> & {
+	key: string;
+}): string | undefined {
+	const strategy = getAIStrategyHistorySnapshot(strategyHistory);
+
+	if (!strategy) {
+		return undefined;
+	}
+
+	switch (key) {
+		case 'ai_strategy_id':
+			return strategy.strategyId?.trim() || undefined;
+		case 'ai_strategy_status':
+			return strategy.status?.trim() || undefined;
+		case 'ai_headline':
+			return strategy.headline?.trim() || undefined;
+		case 'ai_first_actions':
+			return joinNonEmptyValues(
+				strategy.firstActions?.map((action) => action.text) || [],
+			);
+		case 'ai_confidence':
+			return strategy.confidence?.trim() || undefined;
+		case 'ai_limitations':
+			return joinNonEmptyValues(strategy.limitations || []);
+		case 'ai_evidence_refs':
+			return joinNonEmptyValues(
+				strategy.evidenceRefs?.map((evidenceRef) => evidenceRef.refId) || [],
+			)?.replace(/\n/g, ', ');
+		default:
+			return undefined;
+	}
 }
 
 function getSafeHttpUrl(value: string): URL | undefined {
@@ -355,15 +431,16 @@ function getSopStatusSection({
 function getAIStrategySection({
 	annotations,
 	labels,
+	strategyHistory,
 }: AlertResponseContextProps): ResponseContextSectionWithItems | undefined {
-	const statusValue = getMetadataValue({
-		annotations,
-		key: 'ai_strategy_status',
-		labels,
-	});
+	const valueForAIField = (key: string): string | undefined =>
+		strategyHistory
+			? getAIStrategyHistoryValue({ key, strategyHistory })
+			: getMetadataValue({ annotations, key, labels });
+	const statusValue = valueForAIField('ai_strategy_status');
 	const strategyItems = AI_STRATEGY_FIELDS.map((field) => ({
 		...field,
-		value: getMetadataValue({ annotations, key: field.key, labels }),
+		value: valueForAIField(field.key),
 	})).filter((field): field is ResponseContextItem => Boolean(field.value));
 
 	if (!statusValue && !strategyItems.length) {
@@ -389,6 +466,7 @@ function getAIStrategySection({
 function getSectionsWithItems({
 	annotations,
 	labels,
+	strategyHistory,
 }: AlertResponseContextProps): ResponseContextSectionWithItems[] {
 	const sections = RESPONSE_CONTEXT_SECTIONS.map(({ fields, title }) => ({
 		title,
@@ -403,7 +481,11 @@ function getSectionsWithItems({
 		annotations,
 		labels,
 	});
-	const aiStrategySection = getAIStrategySection({ annotations, labels });
+	const aiStrategySection = getAIStrategySection({
+		annotations,
+		labels,
+		strategyHistory,
+	});
 	const sopStatusSection = getSopStatusSection({
 		annotations,
 		labels,
@@ -484,8 +566,13 @@ function AlertResponseContext({
 	alertName,
 	annotations,
 	labels,
+	strategyHistory,
 }: AlertResponseContextProps): JSX.Element | null {
-	const sections = getSectionsWithItems({ annotations, labels });
+	const sections = getSectionsWithItems({
+		annotations,
+		labels,
+		strategyHistory,
+	});
 	const [, copyToClipboard] = useCopyToClipboard();
 	const [copiedTarget, setCopiedTarget] = useState<string>();
 	const copiedResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
