@@ -24,7 +24,7 @@ export const EVIDENCE_METADATA_FIELDS: EvidenceMetadataField[] = [
 	{
 		key: 'ai_strategy_status',
 		label: 'AI strategy status',
-		placeholder: 'ready, unavailable, timeout, sop_missing',
+		placeholder: 'ready, quota_exhausted, unavailable, timeout, sop_missing',
 	},
 	{
 		key: 'ai_headline',
@@ -96,6 +96,7 @@ const AI_STRATEGY_STATUS_VALUES = new Set([
 	'blocked_by_policy',
 	'evidence_unavailable',
 	'low_confidence',
+	'quota_exhausted',
 	'ready',
 	'sop_missing',
 	'timeout',
@@ -161,7 +162,7 @@ export function validateEvidenceMetadataValue(
 		!AI_STRATEGY_STATUS_VALUES.has(trimmedValue.toLowerCase())
 	) {
 		warnings.push(
-			'Use one of: ready, unavailable, timeout, blocked_by_policy, sop_missing, evidence_unavailable, low_confidence.',
+			'Use one of: ready, unavailable, timeout, blocked_by_policy, quota_exhausted, sop_missing, evidence_unavailable, low_confidence.',
 		);
 	}
 

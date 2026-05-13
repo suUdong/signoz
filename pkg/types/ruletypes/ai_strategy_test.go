@@ -113,6 +113,101 @@ func TestGenerateLocalAIStrategyBlocksCrossTenantSOP(t *testing.T) {
 	require.NoError(t, ValidateAIStrategy(strategy))
 }
 
+func TestGenerateLocalAIStrategyFailsOpenWhenProviderDisabled(t *testing.T) {
+	req := validAIStrategyRequest()
+	req.Controls.ProviderEnabled = boolPointer(false)
+
+	strategy, err := GenerateLocalAIStrategy(req)
+
+	require.NoError(t, err)
+	require.Equal(t, AIStrategyStatusUnavailable, strategy.Status)
+	require.Equal(t, "SOP-PAY-001", strategy.SOPID)
+	require.Empty(t, strategy.Hypotheses)
+	require.Empty(t, strategy.FirstActions)
+	require.Contains(t, strategy.Limitations, AIProviderDisabledLimitation)
+	require.NoError(t, ValidateAIStrategy(strategy))
+
+	annotations := AIStrategyIncidentAnnotations(strategy)
+	require.Equal(
+		t,
+		AIStrategyStatusUnavailable,
+		annotations[alertmanagertypes.IncidentAnnotationAIStrategyStatus],
+	)
+	require.Contains(
+		t,
+		annotations[alertmanagertypes.IncidentAnnotationAILimitations],
+		AIProviderDisabledLimitation,
+	)
+}
+
+func TestGenerateLocalAIStrategyBlocksUnlicensedTenant(t *testing.T) {
+	req := validAIStrategyRequest()
+	req.Controls.LicenseAllowed = boolPointer(false)
+
+	strategy, err := GenerateLocalAIStrategy(req)
+
+	require.NoError(t, err)
+	require.Equal(t, AIStrategyStatusBlockedByPolicy, strategy.Status)
+	require.Empty(t, strategy.Hypotheses)
+	require.Empty(t, strategy.FirstActions)
+	require.Contains(t, strategy.Limitations, AILicenseUnavailableLimitation)
+	require.NoError(t, ValidateAIStrategy(strategy))
+}
+
+func TestGenerateLocalAIStrategyTracksQuotaExhaustion(t *testing.T) {
+	req := validAIStrategyRequest()
+	req.Controls.QuotaLimit = 10
+	req.Controls.QuotaUsed = 10
+
+	strategy, err := GenerateLocalAIStrategy(req)
+
+	require.NoError(t, err)
+	require.Equal(t, AIStrategyStatusQuotaExhausted, strategy.Status)
+	require.Contains(t, strategy.Limitations, AIQuotaExhaustedLimitation)
+	require.NotNil(t, strategy.Audit.QuotaLimit)
+	require.NotNil(t, strategy.Audit.QuotaUsed)
+	require.NotNil(t, strategy.Audit.QuotaRemaining)
+	require.Equal(t, int64(10), *strategy.Audit.QuotaLimit)
+	require.Equal(t, int64(10), *strategy.Audit.QuotaUsed)
+	require.Equal(t, int64(0), *strategy.Audit.QuotaRemaining)
+	require.NoError(t, ValidateAIStrategy(strategy))
+}
+
+func TestGenerateLocalAIStrategyTracksTimeoutBudget(t *testing.T) {
+	req := validAIStrategyRequest()
+	req.Controls.TimeoutBudgetMillis = 1500
+	req.Controls.ExecutionElapsedMillis = 1501
+
+	strategy, err := GenerateLocalAIStrategy(req)
+
+	require.NoError(t, err)
+	require.Equal(t, AIStrategyStatusTimeout, strategy.Status)
+	require.Contains(t, strategy.Limitations, AITimeoutBudgetExceededLimitation)
+	require.NotNil(t, strategy.Audit.TimeoutBudgetMillis)
+	require.NotNil(t, strategy.Audit.ExecutionElapsedMillis)
+	require.Equal(t, int64(1500), *strategy.Audit.TimeoutBudgetMillis)
+	require.Equal(t, int64(1501), *strategy.Audit.ExecutionElapsedMillis)
+	require.NoError(t, ValidateAIStrategy(strategy))
+}
+
+func TestGenerateLocalAIStrategyTracksUsageOnReadyStrategy(t *testing.T) {
+	req := validAIStrategyRequest()
+	req.Controls.QuotaLimit = 100
+	req.Controls.QuotaUsed = 12
+	req.Controls.TimeoutBudgetMillis = 5000
+	req.Controls.ExecutionElapsedMillis = 120
+
+	strategy, err := GenerateLocalAIStrategy(req)
+
+	require.NoError(t, err)
+	require.Equal(t, AIStrategyStatusReady, strategy.Status)
+	require.NotNil(t, strategy.Audit.QuotaRemaining)
+	require.Equal(t, int64(88), *strategy.Audit.QuotaRemaining)
+	require.NotNil(t, strategy.Audit.ExecutionElapsedMillis)
+	require.Equal(t, int64(120), *strategy.Audit.ExecutionElapsedMillis)
+	require.NoError(t, ValidateAIStrategy(strategy))
+}
+
 func TestValidateAIStrategyRejectsUngroundedReadyOutput(t *testing.T) {
 	strategy, err := GenerateLocalAIStrategy(validAIStrategyRequest())
 	require.NoError(t, err)
@@ -213,4 +308,8 @@ func validAIStrategyRequest() AIStrategyRequest {
 		},
 		GeneratedAt: "2026-05-12T00:00:00Z",
 	}
+}
+
+func boolPointer(value bool) *bool {
+	return &value
 }

@@ -46,7 +46,7 @@ describe('evidenceMetadata', () => {
 		expect(
 			validateEvidenceMetadataValue('ai_strategy_status', 'fabricated'),
 		).toStrictEqual([
-			'Use one of: ready, unavailable, timeout, blocked_by_policy, sop_missing, evidence_unavailable, low_confidence.',
+			'Use one of: ready, unavailable, timeout, blocked_by_policy, quota_exhausted, sop_missing, evidence_unavailable, low_confidence.',
 		]);
 		expect(
 			validateEvidenceMetadataValue('ai_confidence', 'certain'),

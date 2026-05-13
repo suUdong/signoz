@@ -18,6 +18,7 @@ const (
 	AIStrategyStatusUnavailable         = "unavailable"
 	AIStrategyStatusTimeout             = "timeout"
 	AIStrategyStatusBlockedByPolicy     = "blocked_by_policy"
+	AIStrategyStatusQuotaExhausted      = "quota_exhausted"
 	AIStrategyStatusSOPMissing          = "sop_missing"
 	AIStrategyStatusEvidenceUnavailable = "evidence_unavailable"
 	AIStrategyStatusLowConfidence       = "low_confidence"
@@ -30,20 +31,35 @@ const (
 	defaultAIStrategyPromptVersion = "ds-ir-ko-v1"
 	defaultAIStrategyModel         = "deterministic-local"
 	defaultAIStrategyGeneratedAt   = "1970-01-01T00:00:00Z"
+
+	AIProviderDisabledLimitation      = "AI provider is disabled by tenant or deployment controls."
+	AILicenseUnavailableLimitation    = "AI strategy generation is not licensed for this tenant."
+	AIQuotaExhaustedLimitation        = "AI strategy quota is exhausted for this period."
+	AITimeoutBudgetExceededLimitation = "AI strategy generation exceeded the configured timeout budget."
 )
 
 type AIStrategyRequest struct {
-	StrategyID       string            `json:"strategyId,omitempty"`
-	IncidentID       string            `json:"incidentId"`
-	AlertFingerprint string            `json:"alertFingerprint,omitempty"`
-	Language         string            `json:"language,omitempty"`
-	Labels           map[string]string `json:"labels,omitempty"`
-	Annotations      map[string]string `json:"annotations,omitempty"`
-	SOPDocument      SOPDocument       `json:"sopDocument,omitempty"`
-	EvidenceRefs     []AIEvidenceRef   `json:"evidenceRefs,omitempty"`
-	PromptVersion    string            `json:"promptVersion,omitempty"`
-	Model            string            `json:"model,omitempty"`
-	GeneratedAt      string            `json:"generatedAt,omitempty"`
+	StrategyID       string             `json:"strategyId,omitempty"`
+	IncidentID       string             `json:"incidentId"`
+	AlertFingerprint string             `json:"alertFingerprint,omitempty"`
+	Language         string             `json:"language,omitempty"`
+	Labels           map[string]string  `json:"labels,omitempty"`
+	Annotations      map[string]string  `json:"annotations,omitempty"`
+	SOPDocument      SOPDocument        `json:"sopDocument,omitempty"`
+	EvidenceRefs     []AIEvidenceRef    `json:"evidenceRefs,omitempty"`
+	PromptVersion    string             `json:"promptVersion,omitempty"`
+	Model            string             `json:"model,omitempty"`
+	Controls         AIStrategyControls `json:"controls,omitempty"`
+	GeneratedAt      string             `json:"generatedAt,omitempty"`
+}
+
+type AIStrategyControls struct {
+	ProviderEnabled        *bool `json:"providerEnabled,omitempty"`
+	LicenseAllowed         *bool `json:"licenseAllowed,omitempty"`
+	QuotaLimit             int64 `json:"quotaLimit,omitempty"`
+	QuotaUsed              int64 `json:"quotaUsed,omitempty"`
+	TimeoutBudgetMillis    int64 `json:"timeoutBudgetMillis,omitempty"`
+	ExecutionElapsedMillis int64 `json:"executionElapsedMillis,omitempty"`
 }
 
 type AIStrategy struct {
@@ -90,15 +106,27 @@ type AIEvidenceRef struct {
 }
 
 type AIStrategyAudit struct {
-	PromptVersion    string `json:"promptVersion"`
-	Model            string `json:"model"`
-	GeneratedAt      string `json:"generatedAt"`
-	RedactionApplied bool   `json:"redactionApplied"`
+	PromptVersion          string `json:"promptVersion"`
+	Model                  string `json:"model"`
+	GeneratedAt            string `json:"generatedAt"`
+	RedactionApplied       bool   `json:"redactionApplied"`
+	QuotaLimit             *int64 `json:"quotaLimit,omitempty"`
+	QuotaUsed              *int64 `json:"quotaUsed,omitempty"`
+	QuotaRemaining         *int64 `json:"quotaRemaining,omitempty"`
+	TimeoutBudgetMillis    *int64 `json:"timeoutBudgetMillis,omitempty"`
+	ExecutionElapsedMillis *int64 `json:"executionElapsedMillis,omitempty"`
 }
 
 func GenerateLocalAIStrategy(req AIStrategyRequest) (AIStrategy, error) {
 	strategy := baseAIStrategy(req)
 	if strings.TrimSpace(req.IncidentID) == "" {
+		return strategy, ValidateAIStrategy(strategy)
+	}
+	if strings.TrimSpace(req.SOPDocument.SOPID) != "" {
+		strategy.SOPID = strings.TrimSpace(req.SOPDocument.SOPID)
+		strategy.SOPVersion = strings.TrimSpace(req.SOPDocument.Version)
+	}
+	if applyAIStrategyControls(&strategy, req.Controls) {
 		return strategy, ValidateAIStrategy(strategy)
 	}
 
@@ -110,8 +138,6 @@ func GenerateLocalAIStrategy(req AIStrategyRequest) (AIStrategy, error) {
 		return strategy, ValidateAIStrategy(strategy)
 	}
 
-	strategy.SOPID = strings.TrimSpace(req.SOPDocument.SOPID)
-	strategy.SOPVersion = strings.TrimSpace(req.SOPDocument.Version)
 	tenant := PilotTenantFromLabels(req.Labels)
 	if !PilotTenantIsComplete(tenant) {
 		strategy.Status = AIStrategyStatusBlockedByPolicy
@@ -192,6 +218,11 @@ func ValidateAIStrategy(strategy AIStrategy) error {
 	pilotRequireNonEmpty(&errs, "audit.promptVersion", strategy.Audit.PromptVersion)
 	pilotRequireNonEmpty(&errs, "audit.model", strategy.Audit.Model)
 	pilotRequireNonEmpty(&errs, "audit.generatedAt", strategy.Audit.GeneratedAt)
+	pilotRequireNonNegativeAIControl(&errs, "audit.quotaLimit", strategy.Audit.QuotaLimit)
+	pilotRequireNonNegativeAIControl(&errs, "audit.quotaUsed", strategy.Audit.QuotaUsed)
+	pilotRequireNonNegativeAIControl(&errs, "audit.quotaRemaining", strategy.Audit.QuotaRemaining)
+	pilotRequireNonNegativeAIControl(&errs, "audit.timeoutBudgetMillis", strategy.Audit.TimeoutBudgetMillis)
+	pilotRequireNonNegativeAIControl(&errs, "audit.executionElapsedMillis", strategy.Audit.ExecutionElapsedMillis)
 	if !strategy.Audit.RedactionApplied {
 		errs = append(errs, fmt.Errorf("audit.redactionApplied: must be true before AI strategy output is used"))
 	}
@@ -220,6 +251,79 @@ func ValidateAIStrategy(strategy AIStrategy) error {
 	appendAIStrategySecretAndSafetyErrors(&errs, strategy)
 
 	return errors.Join(errs...)
+}
+
+func applyAIStrategyControls(strategy *AIStrategy, controls AIStrategyControls) bool {
+	applyAIStrategyControlAudit(strategy, controls)
+
+	if controls.ProviderEnabled != nil && !*controls.ProviderEnabled {
+		markAIStrategyFallback(
+			strategy,
+			AIStrategyStatusUnavailable,
+			"AI 제공자가 비활성화되어 SOP 기본 알림만 전송합니다.",
+			AIProviderDisabledLimitation,
+		)
+		return true
+	}
+	if controls.LicenseAllowed != nil && !*controls.LicenseAllowed {
+		markAIStrategyFallback(
+			strategy,
+			AIStrategyStatusBlockedByPolicy,
+			"라이선스 정책상 AI 대응전략을 생성하지 않았습니다.",
+			AILicenseUnavailableLimitation,
+		)
+		return true
+	}
+	if controls.QuotaLimit > 0 && controls.QuotaUsed >= controls.QuotaLimit {
+		markAIStrategyFallback(
+			strategy,
+			AIStrategyStatusQuotaExhausted,
+			"AI 사용량 한도에 도달하여 SOP 기본 알림만 전송합니다.",
+			AIQuotaExhaustedLimitation,
+		)
+		return true
+	}
+	if controls.TimeoutBudgetMillis > 0 && controls.ExecutionElapsedMillis > controls.TimeoutBudgetMillis {
+		markAIStrategyFallback(
+			strategy,
+			AIStrategyStatusTimeout,
+			"AI 대응전략 생성 시간이 초과되어 SOP 기본 알림만 전송합니다.",
+			AITimeoutBudgetExceededLimitation,
+		)
+		return true
+	}
+
+	return false
+}
+
+func applyAIStrategyControlAudit(strategy *AIStrategy, controls AIStrategyControls) {
+	if controls.QuotaLimit != 0 || controls.QuotaUsed != 0 {
+		strategy.Audit.QuotaLimit = aiStrategyInt64Pointer(controls.QuotaLimit)
+		strategy.Audit.QuotaUsed = aiStrategyInt64Pointer(controls.QuotaUsed)
+		if controls.QuotaLimit > 0 {
+			remaining := controls.QuotaLimit - controls.QuotaUsed
+			if remaining < 0 {
+				remaining = 0
+			}
+			strategy.Audit.QuotaRemaining = aiStrategyInt64Pointer(remaining)
+		}
+	}
+	if controls.TimeoutBudgetMillis != 0 || controls.ExecutionElapsedMillis != 0 {
+		strategy.Audit.TimeoutBudgetMillis = aiStrategyInt64Pointer(controls.TimeoutBudgetMillis)
+		strategy.Audit.ExecutionElapsedMillis = aiStrategyInt64Pointer(controls.ExecutionElapsedMillis)
+	}
+}
+
+func markAIStrategyFallback(strategy *AIStrategy, status string, headline string, limitation string) {
+	strategy.Status = status
+	strategy.Confidence = AIConfidenceLow
+	strategy.Headline = headline
+	strategy.Hypotheses = nil
+	strategy.FirstActions = nil
+	strategy.EvidenceRefs = nil
+	strategy.CustomerUpdateDraft = ""
+	strategy.VendorRequestDraft = ""
+	strategy.Limitations = []string{limitation}
 }
 
 // AIStrategyIncidentAnnotations converts a validated strategy into public
@@ -368,11 +472,18 @@ func appendAIStrategySecretAndSafetyErrors(errs *[]error, strategy AIStrategy) {
 	}
 }
 
+func pilotRequireNonNegativeAIControl(errs *[]error, name string, value *int64) {
+	if value != nil && *value < 0 {
+		*errs = append(*errs, fmt.Errorf("%s: must be greater than or equal to zero", name))
+	}
+}
+
 var allowedAIStrategyStatuses = map[string]struct{}{
 	AIStrategyStatusReady:               {},
 	AIStrategyStatusUnavailable:         {},
 	AIStrategyStatusTimeout:             {},
 	AIStrategyStatusBlockedByPolicy:     {},
+	AIStrategyStatusQuotaExhausted:      {},
 	AIStrategyStatusSOPMissing:          {},
 	AIStrategyStatusEvidenceUnavailable: {},
 	AIStrategyStatusLowConfidence:       {},
@@ -438,4 +549,8 @@ func firstActionFromSOP(doc SOPDocument) string {
 	}
 
 	return "SOP 문서의 첫 확인 항목을 검토"
+}
+
+func aiStrategyInt64Pointer(value int64) *int64 {
+	return &value
 }
