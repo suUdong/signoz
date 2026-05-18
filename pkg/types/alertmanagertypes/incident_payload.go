@@ -20,6 +20,12 @@ type IncidentField struct {
 
 var incidentJWTLikePattern = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\b`)
 
+var (
+	incidentValueEmailPattern        = regexp.MustCompile(`\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b`)
+	incidentValueKoreanMobilePattern = regexp.MustCompile(`(?:\+?82[-\s]?)?0?1[016789][-)\s]?\d{3,4}[-\s]?\d{4}`)
+	incidentValueLongSecretPattern   = regexp.MustCompile(`\b[A-Za-z0-9_\-]{32,}\b`)
+)
+
 var incidentSensitiveURLKeys = map[string]struct{}{
 	"access_token":  {},
 	"api_key":       {},
@@ -77,7 +83,20 @@ func SanitizeIncidentValue(value string) string {
 		return RedactedIncidentValue
 	}
 
+	value = redactIncidentPII(value)
+	value = redactIncidentLongSecret(value)
+
 	return value
+}
+
+func redactIncidentPII(value string) string {
+	value = incidentValueEmailPattern.ReplaceAllString(value, "[redacted-email]")
+	value = incidentValueKoreanMobilePattern.ReplaceAllString(value, "[redacted-phone]")
+	return value
+}
+
+func redactIncidentLongSecret(value string) string {
+	return incidentValueLongSecretPattern.ReplaceAllString(value, "[redacted-secret]")
 }
 
 func IncidentInfoFields(info IncidentInfo) []IncidentField {

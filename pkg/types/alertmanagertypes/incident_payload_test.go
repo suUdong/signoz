@@ -1,6 +1,7 @@
 package alertmanagertypes
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/prometheus/alertmanager/template"
@@ -34,6 +35,35 @@ func TestBuildSafeIncidentInfoRedactsSecretLikeValues(t *testing.T) {
 		Value: RedactedIncidentValue,
 	})
 	require.NotContains(t, IncidentInfoDetails(info)["sop_url"], "token=hidden")
+}
+
+func TestSanitizeIncidentValueRedactsEmail(t *testing.T) {
+	got := SanitizeIncidentValue("contact 김철수 chulsoo@example.co.kr immediately")
+	if strings.Contains(got, "chulsoo@example.co.kr") {
+		t.Fatalf("email not redacted: %q", got)
+	}
+}
+
+func TestSanitizeIncidentValueRedactsKoreanMobile(t *testing.T) {
+	got := SanitizeIncidentValue("notify 010-1234-5678 by 5pm")
+	if strings.Contains(got, "010-1234-5678") {
+		t.Fatalf("KR mobile not redacted: %q", got)
+	}
+}
+
+func TestSanitizeIncidentValueRedactsLongUnmarkedSecret(t *testing.T) {
+	raw := "abcdefghijklmnopqrstuvwxyz0123456789" // 36 chars, no marker
+	got := SanitizeIncidentValue("token leaked: " + raw)
+	if strings.Contains(got, raw) {
+		t.Fatalf("long secret not redacted: %q", got)
+	}
+}
+
+func TestSanitizeIncidentValuePreservesShortInnocuousText(t *testing.T) {
+	got := SanitizeIncidentValue("short status: degraded for 3 minutes")
+	if got != "short status: degraded for 3 minutes" {
+		t.Fatalf("innocuous text mutated: %q", got)
+	}
 }
 
 func TestIncidentInfoFieldsOmitEmptyValues(t *testing.T) {
