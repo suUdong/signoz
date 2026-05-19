@@ -312,6 +312,12 @@ func (server *Server) SetConfig(ctx context.Context, alertmanagerConfig *alertma
 		server.dispatcherMetrics,
 		server.notificationManager,
 		server.orgID,
+		// TODO(ds-apm): wire a real dlq.JSONLDeadLetterSink here once the
+		// alertmanager bootstrap exposes a configurable DLQ path
+		// (proposed env knob: SIGNOZ_DLQ_PATH, default
+		// var/ds-apm/alert-dlq.jsonl). Passing nil keeps current behavior
+		// — terminal failures are still logged, just not persisted.
+		nil,
 	)
 
 	// Do not try to add these to server.wg as there seems to be a race condition if

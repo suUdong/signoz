@@ -39,6 +39,13 @@ type Entry struct {
 	Reason   string    `json:"reason,omitempty"`
 }
 
+// Sink is the narrow contract the alertmanager dispatcher depends on so
+// terminal notify failures can be persisted to disk. JSONLDeadLetterSink
+// is the production implementation; tests may provide an in-memory fake.
+type Sink interface {
+	Write(e *Entry) error
+}
+
 // JSONLDeadLetterSink appends Entry values as newline-delimited JSON to a
 // file, rotating when the active file would exceed rotateBytes.
 type JSONLDeadLetterSink struct {

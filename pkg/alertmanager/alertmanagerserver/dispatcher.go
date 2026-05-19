@@ -2,12 +2,14 @@ package alertmanagerserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sort"
 	"sync"
 	"time"
 
+	"github.com/SigNoz/signoz/pkg/alertmanager/alertmanagernotify/dlq"
 	"github.com/SigNoz/signoz/pkg/alertmanager/nfmanager"
 	"github.com/SigNoz/signoz/pkg/errors"
 	"github.com/SigNoz/signoz/pkg/types/alertmanagertypes"
@@ -45,12 +47,22 @@ type Dispatcher struct {
 	notificationManager nfmanager.NotificationManager
 	orgID               string
 	receiverRoutes      map[string]*dispatch.Route
+
+	// dlqSink, when non-nil, captures terminal notify-stage failures so
+	// they can be persisted to disk and replayed later. It is intentionally
+	// optional: passing nil keeps the dispatcher's pre-DLQ behavior intact.
+	dlqSink dlq.Sink
 }
 
 // We use the upstream Limits interface from Prometheus.
 type Limits = dispatch.Limits
 
 // NewDispatcher returns a new Dispatcher.
+//
+// dlqSink is optional: when non-nil, terminal notify-stage failures are
+// persisted as dlq.Entry rows so they survive a restart and can be replayed
+// without double-delivery. Pass nil to keep the dispatcher's behavior
+// identical to its pre-DLQ form (terminal failures are still logged).
 func NewDispatcher(
 	ap provider.Alerts,
 	r *dispatch.Route,
@@ -62,6 +74,7 @@ func NewDispatcher(
 	m *DispatcherMetrics,
 	n nfmanager.NotificationManager,
 	orgID string,
+	dlqSink dlq.Sink,
 ) *Dispatcher {
 	if lim == nil {
 		// Use a simple implementation when no limits are provided
@@ -79,6 +92,7 @@ func NewDispatcher(
 		limits:              lim,
 		notificationManager: n,
 		orgID:               orgID,
+		dlqSink:             dlqSink,
 	}
 	return disp
 }
@@ -342,10 +356,52 @@ func (d *Dispatcher) processAlert(alert *types.Alert, route *dispatch.Route) {
 				logger.DebugContext(ctx, "Notify for alerts failed")
 			} else {
 				logger.ErrorContext(ctx, "Notify for alerts failed")
+				// Persist the terminal failure to the dead-letter sink so
+				// it can be replayed after restart. This mirrors the
+				// durability previously provided by the Python
+				// orchestrator's RetryingSink/DLQSink. DLQ persistence is
+				// best-effort: any error here is swallowed (and logged)
+				// because the dispatcher's job is alerting, not retrying
+				// the sink itself.
+				d.recordTerminalFailure(ctx, alerts, receiverName, err)
 			}
 		}
 		return err == nil
 	})
+}
+
+// recordTerminalFailure persists a terminal notify-stage failure to the
+// dead-letter sink. It is a no-op when no sink is configured and never
+// returns an error to the caller; sink errors are logged at warn level so
+// they remain visible without disrupting the alerting hot path.
+func (d *Dispatcher) recordTerminalFailure(ctx context.Context, alerts []*types.Alert, receiver string, cause error) {
+	if d.dlqSink == nil {
+		return
+	}
+	eventID := ""
+	if len(alerts) > 0 {
+		eventID = alerts[0].Fingerprint().String()
+	}
+	payload, marshalErr := json.Marshal(alerts)
+	if marshalErr != nil {
+		// Keep going with an empty payload — losing the body is preferable
+		// to losing the failure record entirely.
+		payload = nil
+		d.logger.WarnContext(ctx, "dlq: failed to marshal alerts payload", errors.Attr(marshalErr))
+	}
+	reason := ""
+	if cause != nil {
+		reason = cause.Error()
+	}
+	if writeErr := d.dlqSink.Write(&dlq.Entry{
+		EventID:  eventID,
+		Channel:  receiver,
+		Payload:  payload,
+		FailedAt: time.Now().UTC(),
+		Reason:   reason,
+	}); writeErr != nil {
+		d.logger.WarnContext(ctx, "dlq: failed to persist terminal failure", errors.Attr(writeErr))
+	}
 }
 
 // aggrGroup aggregates alert fingerprints into groups to which a

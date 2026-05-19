@@ -428,7 +428,7 @@ route:
 
 	// Set up expectations for getting routes during matching (multiple calls expected)
 
-	dispatcher := NewDispatcher(alerts, route, recorder, marker, timeout, nil, logger, metrics, nfManager, orgId)
+	dispatcher := NewDispatcher(alerts, route, recorder, marker, timeout, nil, logger, metrics, nfManager, orgId, nil)
 	go dispatcher.Run()
 	defer dispatcher.Stop()
 	inputAlerts := []*alertmanagertypes.Alert{
@@ -723,7 +723,7 @@ route:
 	err = nfManager.CreateRoutePolicies(ctx, orgId, routes)
 	require.NoError(t, err)
 
-	dispatcher := NewDispatcher(alerts, route, recorder, marker, timeout, nil, logger, metrics, nfManager, orgId)
+	dispatcher := NewDispatcher(alerts, route, recorder, marker, timeout, nil, logger, metrics, nfManager, orgId, nil)
 	go dispatcher.Run()
 	defer dispatcher.Stop()
 
@@ -958,7 +958,7 @@ route:
 	err = nfManager.CreateRoutePolicies(ctx, orgId, routes)
 	require.NoError(t, err)
 
-	dispatcher := NewDispatcher(alerts, route, recorder, marker, timeout, nil, logger, metrics, nfManager, orgId)
+	dispatcher := NewDispatcher(alerts, route, recorder, marker, timeout, nil, logger, metrics, nfManager, orgId, nil)
 	go dispatcher.Run()
 	defer dispatcher.Stop()
 
@@ -1169,7 +1169,7 @@ func TestDispatcherRace(t *testing.T) {
 	metrics := NewDispatcherMetrics(false, prometheus.NewRegistry())
 	nfManager := nfmanagertest.NewMock()
 	// Set up default expectation that won't be called in this race test
-	dispatcher := NewDispatcher(alerts, nil, nil, marker, timeout, nil, logger, metrics, nfManager, "test-org")
+	dispatcher := NewDispatcher(alerts, nil, nil, marker, timeout, nil, logger, metrics, nfManager, "test-org", nil)
 	go dispatcher.Run()
 	dispatcher.Stop()
 }
@@ -1241,7 +1241,7 @@ route:
 		require.NoError(t, err)
 	}
 
-	dispatcher := NewDispatcher(alerts, route, recorder, marker, timeout, nil, logger, metrics, nfManager, orgId)
+	dispatcher := NewDispatcher(alerts, route, recorder, marker, timeout, nil, logger, metrics, nfManager, orgId, nil)
 	go dispatcher.Run()
 	defer dispatcher.Stop()
 
@@ -1285,7 +1285,7 @@ func TestDispatcher_DoMaintenance(t *testing.T) {
 	metrics := NewDispatcherMetrics(false, r)
 	nfManager := nfmanagertest.NewMock()
 	// Set up default expectation that may be called during maintenance
-	dispatcher := NewDispatcher(alerts, route, recorder, marker, timeout, nil, promslog.NewNopLogger(), metrics, nfManager, "test-org")
+	dispatcher := NewDispatcher(alerts, route, recorder, marker, timeout, nil, promslog.NewNopLogger(), metrics, nfManager, "test-org", nil)
 	aggrGroups := make(map[*dispatch.Route]map[model.Fingerprint]*aggrGroup)
 	aggrGroups[route] = make(map[model.Fingerprint]*aggrGroup)
 
@@ -1386,7 +1386,7 @@ route:
 			if err != nil {
 				t.Fatal(err)
 			}
-			d := NewDispatcher(alerts, route, recorder, marker, timeout, nil, logger, metrics, nfManager, "test-org")
+			d := NewDispatcher(alerts, route, recorder, marker, timeout, nil, logger, metrics, nfManager, "test-org", nil)
 			// setup the dispatcher for tests
 			d.receiverRoutes = map[string]*dispatch.Route{}
 
